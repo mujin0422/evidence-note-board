@@ -23,7 +23,10 @@ export function menuNearPin(note, view, viewport, width = 198, height = 136) {
         anchor.x - width / 2));
     let y = anchor.y + 5;
     if (y + height > viewport.height - 4)
-        y = Math.max(4, anchor.y - PIN_SIZE * view.zoom - height - 5);
+        y = anchor.y - PIN_SIZE * view.zoom - height - 5;
+    // Pin may itself be outside the visible viewport after pan.
+    // Keep the popover fully accessible on screen in all cases.
+    y = Math.max(4, Math.min(viewport.height - height - 4, y));
     return {x, y};
 }
 

@@ -248,12 +248,13 @@ impl Storage {
              JOIN notes nt ON nt.id=t.note_id AND nt.board_id=?1
              ORDER BY c.created_at, c.id",
         )?;
-        stmt.query_map([BOARD_ID], |row| Ok(ConnectionEdge {
+        let rows = stmt.query_map([BOARD_ID], |row| Ok(ConnectionEdge {
             id: row.get(0)?,
             source_note_id: row.get(1)?,
             target_note_id: row.get(2)?,
             color: row.get(3)?,
-        }))?.collect()
+        }))?;
+        rows.collect()
     }
 
     pub fn create_connection(&mut self, source: &str, target: &str) -> Result<ConnectionEdge> {
