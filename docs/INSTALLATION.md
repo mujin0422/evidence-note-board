@@ -1,51 +1,80 @@
-# INSTALLATION — Thử nghiệm trên Fedora GNOME Classic 50.5
+# INSTALLATION — Fedora GNOME Classic 50.5 / Wayland
 
-> Đây là bản thử nghiệm GNOME Shell Extension, **không phải RPM hoàn chỉnh**.
+**Lưu ý:** Đây là build từ source, không có RPM. Đừng thử trên desktop quan trọng khi chưa có backup/sẵn phương án disable extension.
 
-## 1. Kiểm tra máy
+## 1. Kiểm tra môi trường
 
 ```bash
 gnome-shell --version
 echo "$XDG_SESSION_TYPE"
 echo "$XDG_CURRENT_DESKTOP"
-gnome-extensions list --enabled
 ```
 
-Yêu cầu `gnome-shell --version` là dòng `GNOME Shell 50.x` và `XDG_SESSION_TYPE=wayland`. Kiểm tra bạn đã chọn phiên **GNOME Classic** trên màn hình đăng nhập. Lưu danh sách extension đang bật để tiện đối chiếu nếu có xung đột.
+Mục tiêu `GNOME Shell 50.5`, `wayland`, session **GNOME Classic**. Cài công cụ phát triển khi thiếu: `sudo dnf install rust cargo gcc git gnome-extensions-app` (tên gói có thể thay đổi; kiểm tra với `dnf search`). Không dùng root để chạy service.
 
-## 2. Checkout đúng PR
+## 2. Checkout branch Phase 2
 
 ```bash
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
 git fetch origin
-git switch -c feat/gnome-classic50-phase1-hardening --track origin/feat/gnome-classic50-phase1-hardening
+git switch --track origin/feat/phase2-text-notes-persistence
 ```
 
-Khi PR đã merge vào `dev`, có thể dùng `git switch dev && git pull --ff-only origin dev` thay bước trên.
+Sau khi PR được **bạn** merge, thay branch ở trên bằng `dev`.
 
-## 3. Cài ở user scope
+## 3. Build và cài backend Rust
+
+```bash
+bash scripts/install-backend-dev.sh
+systemctl --user status evidence-note-board.service
+busctl --user introspect io.github.mujin0422.EvidenceNoteBoard /io/github/mujin0422/EvidenceNoteBoard
+```
+
+Script chạy Cargo release build, cài binary `~/.local/bin/evidence-note-boardd`, user unit `~/.config/systemd/user/evidence-note-board.service`, bật bằng `systemctl --user enable --now`. Backend chỉ chạy sau khi **user session** đăng nhập, không chạy trước màn hình đăng nhập.
+
+Dữ liệu được tạo tự động ở `$XDG_DATA_HOME/evidence-note-board/evidence.db`, mặc định `~/.local/share/evidence-note-board/evidence.db`. Không tạo database trong source tree.
+
+## 4. Cài GNOME Extension
 
 ```bash
 bash scripts/install-dev.sh
+gnome-extensions enable evidence-note-board@mujin0422.github.io
 ```
 
-Script chỉ chép file sau khi xác nhận GNOME 50.x + Wayland và **không tự bật extension**. Khi cài mới trên Wayland, đăng xuất/đăng nhập nếu GNOME chưa liệt kê extension:
+Nếu extension không được GNOME nhận ra hoặc có mã mới, đăng xuất và đăng nhập lại rồi enable. Trên Wayland không khuyến khích restart GNOME Shell in-place. Click đúp vùng board trống để thêm note. Xem [Phase 2](phases/PHASE_02.md).
+
+## 5. Debug
 
 ```bash
-gnome-extensions enable evidence-note-board@mujin0422.github.io
-gnome-extensions info evidence-note-board@mujin0422.github.io
+systemctl --user status evidence-note-board.service
+journalctl --user -u evidence-note-board.service -b --no-pager
+journalctl --user -b | grep -i 'evidence-note-board'
 ```
 
-Nếu chưa hoạt động sau enable, thử đăng xuất rồi đăng nhập lại. Xem [TESTING](TESTING.md) để biết các tình huống cần xác nhận.
+Nếu thông báo `BACKEND OFFLINE`: kiểm tra service, sau đó disable/re-enable extension. Không log thông tin cá nhân/nội dung note.
 
-## 4. Disable và gỡ
+## 6. Sao lưu, gỡ
+
+Để tạo backup nhất quán, dừng service trước khi sao chép DB, kể cả file `-wal`/`-shm` nếu có:
 
 ```bash
 gnome-extensions disable evidence-note-board@mujin0422.github.io
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/evidence-note-board@mujin0422.github.io"
+systemctl --user stop evidence-note-board.service
+mkdir -p "$HOME/evidence-note-board-backup"
+cp -a "${XDG_DATA_HOME:-$HOME/.local/share}/evidence-note-board/." "$HOME/evidence-note-board-backup/"
+systemctl --user start evidence-note-board.service
 ```
 
-Chỉ xóa thư mục extension PoC sau khi disable. Bản này không tạo database hoặc dữ liệu note.
+Sau khi đảm bảo đã lưu backup, muốn gỡ ứng dụng:
 
-Nếu bị lỗi GNOME Shell, sử dụng GNOME Extensions để disable, hoặc chuyển sang TTY và loại bỏ thư mục extension sau khi đăng xuất; không cần chạy GNOME Shell bằng root. Ghi lại log qua `journalctl --user -b | grep -i evidence-note-board`.
+```bash
+gnome-extensions disable evidence-note-board@mujin0422.github.io
+systemctl --user disable --now evidence-note-board.service
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/evidence-note-board@mujin0422.github.io"
+rm -f "$HOME/.config/systemd/user/evidence-note-board.service"
+rm -f "$HOME/.local/bin/evidence-note-boardd"
+systemctl --user daemon-reload
+```
+
+**Không xóa thư mục dữ liệu** khi uninstall. Nếu cần restore, tắt service trước rồi copy database từ backup về vị trí XDG data directory.

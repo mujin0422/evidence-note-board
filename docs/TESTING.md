@@ -1,56 +1,49 @@
-# TESTING — Kiểm thử Phase 1
+# TESTING — Kế hoạch nghiệm thu theo phase
 
-**Môi trường nghiệm thu:** Fedora GNOME Classic **50.5**, Wayland. **Kết quả thực tế: CHƯA KIỂM THỬ.** Không suy ra pass từ GitHub Actions.
+Đừng coi `Build OK` là `GNOME UI OK`. Có ba lớp kiểm thử độc lập:
 
-## A. Kiểm tra tự động (cloud / local)
+1. **Static / unit:** Node syntax, camera tests, Python SQLite migration, Rust `cargo test`.
+2. **Service integration:** chạy user service thật trong user bus, `busctl introspect`, tạo/sửa/xóa qua D-Bus, đóng và mở lại service để đọc SQLite.
+3. **Desktop on-device:** Fedora GNOME Classic 50.5 Wayland; toàn bộ UI, fullscreen/Overview/IME và tương tác.
 
-| Lớp kiểm thử | Lệnh | Giới hạn |
-|---|---|---|
-| Cú pháp JS | `node --check extension/{extension,boardView,canvasMath}.js` (chạy riêng từng file) | Không tải GI/Clutter |
-| Camera | `node --test tests/canvasMath.test.js` | Chỉ kiểm tra toán học |
-| Metadata / ZIP | `bash scripts/build-extension.sh && python3 tests/check_extension.py` | Không chạy GUI |
-| Schema dự kiến | `python3 tests/check_migration.py` | Chưa có SQLite backend |
-| Shell script | `bash -n scripts/install-dev.sh scripts/build-extension.sh` | Không chứng minh cài thành công |
+## Phase 1
 
-## B. Kiểm thử thủ công có bằng chứng
+- [docs/phases/PHASE_01.md](phases/PHASE_01.md)
+- [docs/PHASE1_TEST_PLAN.md](PHASE1_TEST_PLAN.md)
 
-Điền **PASS / FAIL / BLOCKED** và ghi tên máy, GPU, `gnome-shell --version`, `echo $XDG_SESSION_TYPE`, tên session `GNOME Classic`, ngày thử.
+Chưa có kết quả tương tác compositor thực tế trong repo. Nếu GNOME Classic không nhận sự kiện/stacking, Phase 2 UI cũng không thể đạt.
 
-- [ ] B01: enable thành công, `gnome-extensions info` không báo ERROR.
-- [ ] B02: board charcoal `#111111`, hai thẻ minh họa xuất hiện ở desktop trống.
-- [ ] B03: Firefox và Terminal luôn hiển thị **trên** board, không bị board chặn thao tác.
-- [ ] B04: top bar, bottom panel/dock GNOME Classic không bị che hoặc vô hiệu.
-- [ ] B05: cuộn **không Ctrl** không zoom; `Ctrl + Wheel` zoom tại con trỏ 25%–300%.
-- [ ] B06: giữ và kéo nút chuột giữa pan mượt; nhả chuột ngoài board vẫn kết thúc drag.
-- [ ] B07: disable ngay giữa pan không kẹt pointer; re-enable không tạo actor nhân đôi.
-- [ ] B08: Overview, workspace switch, lock/unlock, fullscreen không lỗi hoặc hiển thị sai.
-- [ ] B09: đổi độ phân giải và kết nối/rút màn hình ngoài không crash Shell.
-- [ ] B10: disable khôi phục background gốc; bật lại được; không báo lỗi mới trong logs.
-- [ ] B11: thử cùng và không cùng các extension GNOME Classic đang bật (đặc biệt extension quản lý desktop/panel).
+## Phase 2
 
-Mỗi trường hợp ghi screenshot/video (nếu có), log, trạng thái và bước tái hiện. **Không gộp PR chỉ vì các bài kiểm tra tĩnh pass** nếu mục tiêu là chứng minh khả thi trên desktop.
+- [docs/phases/PHASE_02.md](phases/PHASE_02.md)
+- Backend: `cargo test --manifest-path backend/Cargo.toml`.
+- SQLite: kiểm tra migration/user_version, insert/query, Unicode, update, delete, reopen.
+- Integration: kiểm tra hệ thống D-Bus + quyền user service.
+- Manual: click đúp tạo note; nhập văn bản multiline tiếng Việt; kéo; zoom, pan; delete 2-click; disable/re-enable; logout/login; offline error; data retention.
+- Performance: kiểm tra 10/100 note trên máy thật; không khẳng định FPS khi chưa đo.
 
-## C. Mẫu báo cáo
+**Hiện trạng:** source đã commit; còn thiếu biên bản kiểm thử trực tiếp Fedora GNOME Classic 50.5. Nếu CI chưa báo thành công thì cũng chưa thể khẳng định build Rust.
+
+## Mẫu báo cáo
 
 ```text
-Ngày:
-Fedora:
-GNOME Shell:
-Session: GNOME Classic / Wayland
-GPU / số màn hình:
-Extension khác đang bật:
-B01...B11: PASS/FAIL/BLOCKED
-Bước tái hiện lỗi:
-Log (đã loại bỏ dữ liệu riêng tư):
-Ảnh/video:
-Kết luận: Phase 1 accepted / needs fixes
+Ngày / người thử:
+Commit / PR:
+Fedora / GNOME Shell / session:
+CPU-GPU / số màn hình:
+User service: running / failed
+CI commit status:
+Phase 1: pass / fail / blocked
+Phase 2:
+  Create:
+  Edit + Unicode multiline:
+  Move:
+  Delete confirmation:
+  Zoom and pan persisted:
+  Re-enable:
+  Re-login:
+  Backend restart:
+  Privacy/security:
+Log / screenshot / reproduction steps:
+Kết luận:
 ```
-
-## D. Khôi phục khi lỗi
-
-```bash
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-journalctl --user -b | grep -i 'evidence-note-board'
-```
-
-Nếu desktop bị treo đến mức không chạy được CLI, chuyển sang TTY (thường `Ctrl+Alt+F3`) nếu có, rồi tắt phiên GNOME và tạm di chuyển thư mục extension khỏi `~/.local/share/gnome-shell/extensions/`; đăng nhập lại. Không thay đổi source GNOME Shell hoặc Mutter để chữa lỗi PoC.
