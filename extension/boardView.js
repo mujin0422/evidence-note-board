@@ -379,8 +379,8 @@ export class BoardView {
             });
             if (!this._alive || this._dropProcess !== process)
                 return;
-            if (!ok || !process.get_successful())
-                return;
+            if (!ok || !process.get_successful() || !stdout.trim())
+                return; // Closing GTK drop window without a file is cancel.
             const paths = JSON.parse(stdout);
             if (!Array.isArray(paths) || paths.length === 0)
                 return;
