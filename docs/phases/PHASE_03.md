@@ -65,3 +65,11 @@ Không xóa `evidence.db` khi cài lại.
   subprocess chooser đang mở.
 - CI **không** chứng minh bộ giải mã trên GPU hoặc event handling trên
   GNOME; chỉ chốt Phase 3 khi thử ở máy đích.
+
+## Backend readiness ở Phase 3
+
+Tính năng import ảnh dùng cùng Rust user D-Bus service. Bản vá autostart
+sẽ tự khởi động backend khi đăng nhập và tự reconnect khi service restart,
+tránh phải chạy lệnh `systemctl` trước khi nhấn `+ ẢNH`.
+Dữ liệu image notes và assets cũ được giữ nguyên; cần kiểm thử trên
+GNOME Classic 50.5 trước khi nghiệm thu. Xem [AUTOSTART](../AUTOSTART.md).

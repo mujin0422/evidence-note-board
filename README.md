@@ -1,8 +1,22 @@
 # Evidence Note Board
 
+## Cài một lần, tự chạy khi đăng nhập
+
+```bash
+git fetch origin
+git switch --track origin/fix/backend-autostart-and-reconnect
+bash scripts/setup-dev.sh
+```
+
+Backend Rust sẽ được `systemd --user` bật khi đăng nhập, có D-Bus
+activation dự phòng, và GNOME Extension tự nối lại khi backend restart.
+**Không cần chạy `systemctl --user restart` mỗi lần bật máy.**
+Nếu GNOME Wayland chưa nhận mã extension mới, logout/login một lần.
+Xem [AUTOSTART](docs/AUTOSTART.md) để kiểm tra và gỡ cài đặt.
+
 Ứng dụng Linux desktop native theo phong cách bảng điều tra, phát triển cho **Fedora GNOME Classic 50.5 / Wayland**. Dữ liệu lưu **cục bộ**; không có tài khoản, cloud hay Electron.
 
-> **Trạng thái:** Phase 2 đã được người dùng nghiệm thu MVP trên Fedora GNOME Classic 50.5 (tạo, nhập multiline, di chuyển, xóa, lưu/khôi phục). Phase 3 đang ở bản PR thử nghiệm; CI không thay cho kiểm thử giao diện thật.
+> **Trạng thái:** Phase 2 đã nghiệm thu MVP trên Fedora GNOME Classic 50.5. Phase 3 đã có mã nguồn trong dev nhưng phần giao diện ảnh vẫn cần kiểm thử thực tế. CI không thay cho kiểm thử GNOME Shell.
 
 ## Tiến độ theo phase
 

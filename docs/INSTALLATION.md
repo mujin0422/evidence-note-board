@@ -1,80 +1,34 @@
 # INSTALLATION — Fedora GNOME Classic 50.5 / Wayland
 
-**Lưu ý:** Đây là build từ source, không có RPM. Đừng thử trên desktop quan trọng khi chưa có backup/sẵn phương án disable extension.
+## Cài đặt & bật tự động — cách khuyến nghị
 
-## 1. Kiểm tra môi trường
-
-```bash
-gnome-shell --version
-echo "$XDG_SESSION_TYPE"
-echo "$XDG_CURRENT_DESKTOP"
-```
-
-Mục tiêu `GNOME Shell 50.5`, `wayland`, session **GNOME Classic**. Cài công cụ phát triển khi thiếu: `sudo dnf install rust cargo gcc git gnome-extensions-app` (tên gói có thể thay đổi; kiểm tra với `dnf search`). Không dùng root để chạy service.
-
-## 2. Checkout branch Phase 2
+Từ branch PR chưa merge hoặc `dev` sau khi đã được merge:
 
 ```bash
-git clone https://github.com/mujin0422/evidence-note-board.git
-cd evidence-note-board
 git fetch origin
-git switch --track origin/feat/phase2-text-notes-persistence
+git switch --track origin/fix/backend-autostart-and-reconnect
+bash scripts/setup-dev.sh
 ```
 
-Sau khi PR được **bạn** merge, thay branch ở trên bằng `dev`.
+`setup-dev.sh` gọi script cài Rust backend, user systemd unit và D-Bus
+activation, sau đó cài GNOME extension. Không cần chạy
+`systemctl --user daemon-reload/enable/restart` bằng tay.
+Không cần sudo để cài ứng dụng; chỉ `sudo dnf install rust cargo`
+nếu thiếu công cụ build. Đăng xuất/đăng nhập lại GNOME Wayland nếu
+extension chưa nhận code mới.
 
-## 3. Build và cài backend Rust
+Xem [AUTOSTART](AUTOSTART.md) để biết cách hoạt động và kiểm tra.
+Chi tiết phát triển từng Phase ở [PHASE_02](phases/PHASE_02.md)
+và [PHASE_03](phases/PHASE_03.md).
+
+## Debug
 
 ```bash
-bash scripts/install-backend-dev.sh
-systemctl --user status evidence-note-board.service
-busctl --user introspect io.github.mujin0422.EvidenceNoteBoard /io/github/mujin0422/EvidenceNoteBoard
+systemctl --user is-enabled evidence-note-board.service
+systemctl --user is-active evidence-note-board.service
+journalctl --user -u evidence-note-board.service -b -n 100 --no-pager
 ```
 
-Script chạy Cargo release build, cài binary `~/.local/bin/evidence-note-boardd`, user unit `~/.config/systemd/user/evidence-note-board.service`, bật bằng `systemctl --user enable --now`. Backend chỉ chạy sau khi **user session** đăng nhập, không chạy trước màn hình đăng nhập.
-
-Dữ liệu được tạo tự động ở `$XDG_DATA_HOME/evidence-note-board/evidence.db`, mặc định `~/.local/share/evidence-note-board/evidence.db`. Không tạo database trong source tree.
-
-## 4. Cài GNOME Extension
-
-```bash
-bash scripts/install-dev.sh
-gnome-extensions enable evidence-note-board@mujin0422.github.io
-```
-
-Nếu extension không được GNOME nhận ra hoặc có mã mới, đăng xuất và đăng nhập lại rồi enable. Trên Wayland không khuyến khích restart GNOME Shell in-place. Click đúp vùng board trống để thêm note. Xem [Phase 2](phases/PHASE_02.md).
-
-## 5. Debug
-
-```bash
-systemctl --user status evidence-note-board.service
-journalctl --user -u evidence-note-board.service -b --no-pager
-journalctl --user -b | grep -i 'evidence-note-board'
-```
-
-Nếu thông báo `BACKEND OFFLINE`: kiểm tra service, sau đó disable/re-enable extension. Không log thông tin cá nhân/nội dung note.
-
-## 6. Sao lưu, gỡ
-
-Để tạo backup nhất quán, dừng service trước khi sao chép DB, kể cả file `-wal`/`-shm` nếu có:
-
-```bash
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-systemctl --user stop evidence-note-board.service
-mkdir -p "$HOME/evidence-note-board-backup"
-cp -a "${XDG_DATA_HOME:-$HOME/.local/share}/evidence-note-board/." "$HOME/evidence-note-board-backup/"
-systemctl --user start evidence-note-board.service
-```
-
-Sau khi đảm bảo đã lưu backup, muốn gỡ ứng dụng:
-
-```bash
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-systemctl --user disable --now evidence-note-board.service
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/evidence-note-board@mujin0422.github.io"
-rm -f "$HOME/.config/systemd/user/evidence-note-board.service"
-rm -f "$HOME/.local/bin/evidence-note-boardd"
-systemctl --user daemon-reload
-```
-
-**Không xóa thư mục dữ liệu** khi uninstall. Nếu cần restore, tắt service trước rồi copy database từ backup về vị trí XDG data directory.
+Dữ liệu trong `~/.local/share/evidence-note-board` không bị xoá khi
+cài lại. Xem AUTOSTART để gỡ user unit, binary và D-Bus entry, nhưng
+giữ nguyên database/asset.
