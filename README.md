@@ -156,3 +156,18 @@ gnome-extensions enable evidence-note-board@mujin0422.github.io
 ```
 
 Không xóa cơ sở dữ liệu khi nâng cấp.
+
+## Phase 3: thao tác ảnh và kích thước note
+
+Kéo `↘` trong thanh ảnh để tăng/giảm kích thước mà vẫn giữ tỉ lệ;
+`↶/↷` xoay 15°, `⧉` tạo bản sao ảnh độc lập. Với giấy chữ, kéo
+`↔` để điều chỉnh **chiều ngang**; chiều dọc tự thay đổi theo nội
+dung, không bao giờ nhỏ hơn chiều cao mặc định.
+
+Để **thả file từ Nautilus**, nhấn `⇩ THẢ ẢNH` rồi kéo các ảnh
+PNG/JPEG/WebP vào cửa sổ GTK nhỏ xuất hiện. Đây là cửa sổ drop target
+GTK4 riêng, **chưa phải** thả trực tiếp lên wallpaper. Cài
+`sudo dnf install gtk4 python3-gobject zenity` nếu thiếu dependency.
+
+Bản này cần cập nhật cả Rust backend bằng `bash scripts/setup-dev.sh`.
+Không xóa database.

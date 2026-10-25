@@ -381,8 +381,8 @@ export class BoardView {
                 return;
             if (!ok || !process.get_successful())
                 return;
-            const paths = stdout.split('\n').map(path => path.trim()).filter(Boolean);
-            if (paths.length === 0)
+            const paths = JSON.parse(stdout);
+            if (!Array.isArray(paths) || paths.length === 0)
                 return;
             const origin = screenToWorld(this._view, {
                 x: this._root.width / 2,
@@ -390,6 +390,8 @@ export class BoardView {
             });
             let added = 0;
             for (const path of paths.slice(0, 12)) {
+                if (typeof path !== 'string' || !GLib.path_is_absolute(path))
+                    continue;
                 try {
                     const image = await this._service.importImage(path,
                         origin.x + 26 * added, origin.y + 26 * added);
