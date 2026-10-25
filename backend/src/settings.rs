@@ -2,7 +2,7 @@
 //! Crash-safe replace avoids partial JSON writes. Invalid files are preserved
 //! for user investigation rather than overwritten during startup.
 use serde::{Deserialize, Serialize};
-use std::{fs, io::Write, path::{Path, PathBuf}};
+use std::{fs, io::Write, path::PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 

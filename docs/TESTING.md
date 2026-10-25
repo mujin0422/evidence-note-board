@@ -130,8 +130,8 @@ Nghiệm thu hiển thị bắt buộc thử GNOME Wayland thực tế.
 
 ## Phase 5 — production integration
 
-- `node --test tests/productionMath.test.js`: primary monitor,
-  hot-plug fallback, offscreen wire culling, retry backoff.
+- `node --test tests/productionMath.test.js`: bố cục một màn hình,
+  vùng nhìn dây đỏ, retry backoff (không còn test primary/hot-plug).
 - `python3 -m unittest discover -s tests -p 'test_backup.py'`:
   SQLite backup, integrity/checksum verify, refuse restore without
   confirmation, guarded rollback restore.
@@ -139,5 +139,5 @@ Nghiệm thu hiển thị bắt buộc thử GNOME Wayland thực tế.
   10/100/500 notes with up to 1,000 edges; **not desktop FPS**.
 - `python3 tests/check_phase5.py`: JS/backend/config wire-up checks.
 - Fedora GNOME Classic 50.5 Wayland: use the checklist in
-  [PHASE_05](phases/PHASE_05.md) for multi-monitor, crash recovery,
-  hiDPI, Settings persistence and interactive performance.
+  [PHASE_05](phases/PHASE_05.md) for single-screen, crash recovery,
+  Settings persistence and interactive performance.

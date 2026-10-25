@@ -15,7 +15,7 @@ import {PIN_SIZE, pinPosition} from './pinMath.js';
 import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
     from './stringMath.js';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
-import {DEFAULT_PREFERENCES,primaryMonitor,toolbarLayout,curveVisible,reconnectDelay}
+import {DEFAULT_PREFERENCES,singleScreenLayout,curveVisible,reconnectDelay}
     from './productionMath.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
@@ -31,7 +31,6 @@ export class BoardView {
         this._settingsButton = null;
         this._settingsMenu = null;
         this._preferences = {...DEFAULT_PREFERENCES};
-        this._monitorRect = null;
         this._dirtyNotes = new Set();
         this._dirtyView = false;
         this._reconnectTimer = 0;
@@ -46,7 +45,6 @@ export class BoardView {
         this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
         this._backgroundSignal = 0;
-        this._monitorSignal = 0;
         this._stageSignals = [];
         this._grab = null;
         this._dragPoint = null;
@@ -114,7 +112,7 @@ export class BoardView {
         });
         this._createButton.set_position(22, 98);
         this._createButton.connect('clicked', () => {
-            const {x,y}=toolbarLayout(this._monitorRect).center;
+            const {x,y}=singleScreenLayout(global.stage.width,global.stage.height).center;
             if (Number.isFinite(x) && Number.isFinite(y))
                 this._createNoteAtScreen(x, y);
         });
@@ -150,7 +148,6 @@ export class BoardView {
             if (child !== this._root)
                 this._raiseAboveWallpaper();
         });
-        this._monitorSignal = Main.layoutManager.connect('monitors-changed', () => this._resize());
         for (const name of ['notify::width', 'notify::height'])
             this._stageSignals.push(global.stage.connect(name, () => this._resize()));
         // Capturing at the Stage sees button release BEFORE a pin can consume
@@ -307,12 +304,10 @@ export class BoardView {
             ()=>this._savePreferences({...this._preferences,
                 zoom_step:this._preferences.zoom_step>1.15?1.1:1.25}));
         action('Zoom 100%',()=>{
-            const m=this._monitorRect;
-            if (m) {
-                this._view=zoomAt(this._view,toolbarLayout(m).center,1);
-                this._applyView();
-                this._scheduleView();
-            }
+            const point=singleScreenLayout(global.stage.width,global.stage.height).center;
+            this._view=zoomAt(this._view,point,1);
+            this._applyView();
+            this._scheduleView();
             this._closeSettingsMenu();
         });
         action('Đóng',()=>this._closeSettingsMenu());
@@ -336,10 +331,8 @@ export class BoardView {
     _resize() {
         if (this._root)
             this._root.set_size(global.stage.width, global.stage.height);
-        const monitor=primaryMonitor(Main.layoutManager.monitors,
-            Main.layoutManager.primaryIndex,global.stage.width,global.stage.height);
-        this._monitorRect=monitor;
-        const c=toolbarLayout(monitor);
+        // Single-screen mode: toolbar remains at fixed stage coordinates.
+        const c=singleScreenLayout(global.stage.width,global.stage.height);
         this._hud?.set_position(c.hud.x,c.hud.y);
         this._createButton?.set_position(c.text.x,c.text.y);
         this._imageButton?.set_position(c.image.x,c.image.y);
@@ -487,7 +480,7 @@ export class BoardView {
             if (!selected)
                 return;
             const at = screenToWorld(this._view, {
-                ...toolbarLayout(this._monitorRect).center,
+                ...singleScreenLayout(global.stage.width,global.stage.height).center,
             });
             this._setStatus('Đang nhập ảnh vào bộ nhớ cục bộ…');
             const note = await this._service.importImage(selected, at.x, at.y);
@@ -1254,10 +1247,6 @@ export class BoardView {
             GLib.Source.remove(this._viewTimer);
             this._viewTimer = 0;
             this._persistView();
-        }
-        if (this._monitorSignal) {
-            Main.layoutManager.disconnect(this._monitorSignal);
-            this._monitorSignal = 0;
         }
         if (this._backgroundSignal && this._backgroundGroup) {
             this._backgroundGroup.disconnect(this._backgroundSignal);
