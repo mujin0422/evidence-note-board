@@ -70,7 +70,7 @@ impl Storage {
             "SELECT id, COALESCE(title, ''), content, x, y, width, height, rotation, color, z_index
              FROM notes WHERE board_id = ?1 AND type = 'text' ORDER BY z_index, created_at, id",
         )?;
-        stmt.query_map([BOARD_ID], |row| {
+        let notes = stmt.query_map([BOARD_ID], |row| {
             Ok(Note {
                 id: row.get(0)?,
                 title: row.get(1)?,
@@ -84,7 +84,8 @@ impl Storage {
                 z_index: row.get(9)?,
             })
         })?
-        .collect()
+        .collect();
+        notes
     }
 
     pub fn create_note(&self, title: &str, content: &str, x: f64, y: f64) -> Result<Note> {
