@@ -24,6 +24,12 @@ const XML = `<node>
       <arg type="s" direction="in"/><arg type="d" direction="in"/>
       <arg type="d" direction="in"/><arg type="d" direction="in"/>
     </method>
+    <method name="ListConnections"><arg type="s" direction="out"/></method>
+    <method name="CreateConnection">
+      <arg type="s" direction="in"/><arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="DeleteConnection"><arg type="s" direction="in"/></method>
     <method name="DeleteNote"><arg type="s" direction="in"/></method>
     <method name="GetView"><arg type="s" direction="out"/></method>
     <method name="SaveView">
@@ -100,6 +106,22 @@ export class NoteService {
     updateGeometry(id, width, height, rotation) {
         return this._enqueue(() =>
             this._proxy.UpdateGeometryAsync(id, width, height, rotation));
+    }
+
+    async listConnections() {
+        const [payload] = await this._proxy.ListConnectionsAsync();
+        return JSON.parse(payload);
+    }
+
+    createConnection(sourceId, targetId) {
+        return this._enqueue(async () => {
+            const [payload] = await this._proxy.CreateConnectionAsync(sourceId, targetId);
+            return JSON.parse(payload);
+        });
+    }
+
+    deleteConnection(id) {
+        return this._enqueue(() => this._proxy.DeleteConnectionAsync(id));
     }
 
     deleteNote(id) {
