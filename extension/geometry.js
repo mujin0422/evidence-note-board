@@ -67,19 +67,24 @@ export function pointerAngle(screenX, screenY, note, view) {
 // Hit testing uses actor.transform_stage_point to account for zoom/rotation.
 // Top-left corner = rotate, right edge/bottom-right = resize,
 // paper border = drag, interior of text paper = edit.
-export function gestureAt(x, y, width, height, type) {
+export function gestureAt(x, y, width, height, type, zoom = 1) {
     if (![x, y, width, height].every(Number.isFinite) ||
         width <= 0 || height <= 0 ||
         x < 0 || y < 0 || x > width || y > height)
         return 'edit';
-    if (x <= CORNER_HIT && y <= CORNER_HIT)
+    // At 25% zoom a fixed 16px world-space edge would be only 4px
+    // on screen, so widen hit zones while keeping editor usable.
+    const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+    const border = clamp(12 / scale, BORDER_HIT, 48);
+    const corner = clamp(18 / scale, CORNER_HIT, 56);
+    if (x <= corner && y <= corner)
         return 'rotate';
     if (type === 'image' &&
-        x >= width - CORNER_HIT && y >= height - CORNER_HIT)
+        x >= width - corner && y >= height - corner)
         return 'resize';
-    if (x >= width - BORDER_HIT)
+    if (x >= width - border)
         return 'resize';
-    if (y <= BORDER_HIT || x <= BORDER_HIT || y >= height - BORDER_HIT)
+    if (y <= border || x <= border || y >= height - border)
         return 'drag';
     return type === 'image' ? 'drag' : 'edit';
 }
