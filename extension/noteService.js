@@ -20,6 +20,14 @@ const XML = `<node>
       <arg type="s" direction="in"/><arg type="d" direction="in"/>
       <arg type="d" direction="in"/>
     </method>
+    <method name="UpdateGeometry">
+      <arg type="s" direction="in"/><arg type="d" direction="in"/>
+      <arg type="d" direction="in"/><arg type="d" direction="in"/>
+    </method>
+    <method name="DuplicateImage">
+      <arg type="s" direction="in"/><arg type="d" direction="in"/>
+      <arg type="d" direction="in"/><arg type="s" direction="out"/>
+    </method>
     <method name="DeleteNote"><arg type="s" direction="in"/></method>
     <method name="GetView"><arg type="s" direction="out"/></method>
     <method name="SaveView">
@@ -91,6 +99,18 @@ export class NoteService {
 
     moveNote(id, x, y) {
         return this._enqueue(() => this._proxy.MoveNoteAsync(id, x, y));
+    }
+
+    updateGeometry(id, width, height, rotation) {
+        return this._enqueue(() =>
+            this._proxy.UpdateGeometryAsync(id, width, height, rotation));
+    }
+
+    duplicateImage(id, x, y) {
+        return this._enqueue(async () => {
+            const [payload] = await this._proxy.DuplicateImageAsync(id, x, y);
+            return JSON.parse(payload);
+        });
     }
 
     deleteNote(id) {
