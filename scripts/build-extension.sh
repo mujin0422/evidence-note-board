@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="$REPO_ROOT/dist"
-mkdir -p "$OUT_DIR"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT="$ROOT/dist"
+mkdir -p "$OUT"
 
-python3 - "$REPO_ROOT" "$OUT_DIR" <<'PY'
+python3 - "$ROOT" "$OUT" <<'PY'
 import pathlib
 import sys
 import zipfile
 
 root = pathlib.Path(sys.argv[1])
-destination = pathlib.Path(sys.argv[2]) / "evidence-note-board-gnome50-poc.zip"
+output = pathlib.Path(sys.argv[2]) / "evidence-note-board-gnome50-poc.zip"
 source = root / "extension"
-with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
-    for name in ("extension.js", "canvasMath.js", "metadata.json", "stylesheet.css"):
+files = ("metadata.json", "extension.js", "boardView.js",
+         "canvasMath.js", "stylesheet.css")
+with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+    for name in files:
         archive.write(source / name, arcname=name)
-print(f"Created: {destination}")
+print(f"Đã tạo: {output}")
 PY

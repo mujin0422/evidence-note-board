@@ -1,37 +1,14 @@
-# Phase 1: Fedora GNOME 50 Wayland acceptance
+# PHASE1_TEST_PLAN — Checklist tóm tắt
 
-**Status: NOT YET VERIFIED ON DEVICE.** Passing Node/Python tests is not a substitute for this checklist.
+Xem [TESTING](TESTING.md) để có danh sách đầy đủ và biểu mẫu báo cáo.
 
-## Preconditions
+- [ ] Fedora GNOME Classic 50.5 Wayland được xác nhận thực tế.
+- [ ] Board hiển thị trong background layer, sau cửa sổ ứng dụng.
+- [ ] GNOME top bar và panel/dock không bị che.
+- [ ] Ctrl + Mouse Wheel zoom có neo con trỏ.
+- [ ] Middle Mouse Drag pan, release ngoài vùng board và disable không kẹt chuột.
+- [ ] Enable/disable nhiều lần không nhân đôi actor.
+- [ ] Overview, đa màn hình và lock/unlock không lỗi.
+- [ ] Có ảnh/video, phiên bản, log và kết quả pass/fail.
 
-1. Fedora Workstation 44, GNOME Shell 50, Wayland (`echo "$XDG_SESSION_TYPE"` must say `wayland`).
-2. Confirm `gnome-shell --version` reports major version 50.
-3. Back up any local GNOME extension settings if important. Have a terminal ready.
-4. Install using `bash scripts/install-dev.sh`, log out/in if extension isn't detected, and enable it.
-
-## Manual acceptance
-
-- [ ] Extension reports enabled in `gnome-extensions info evidence-note-board@mujin0422.github.io`.
-- [ ] Desktop wallpaper is replaced with a charcoal board and two example cards.
-- [ ] The GNOME top bar, overview and desktop application windows are unaffected.
-- [ ] Firefox/Terminal appears in front of board; no always-on-top overlay.
-- [ ] Mouse wheel without Ctrl doesn't zoom.
-- [ ] Ctrl + mouse wheel zooms anchored to cursor; status shows 25–300%.
-- [ ] Middle mouse drag pans the board; no permanent pointer grab.
-- [ ] Monitor resize or hotplug doesn't crash the shell.
-- [ ] Enter/leave Overview, switch workspaces and lock/unlock session without corruption.
-- [ ] Disabling extension restores original wallpaper background.
-- [ ] After disabling, `journalctl --user -b` contains no new evidence-board errors.
-
-## Debugging
-
-```bash
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-journalctl --user -b | grep -i 'evidence-note-board'
-```
-
-Prefer a nested session for first boot: install `mutter-devkit` and run `dbus-run-session gnome-shell --devkit --wayland` on GNOME 50. **Not** a guarantee of full isolation. If you change extension code, a Wayland Shell process must be restarted (normally log out and back in).
-
-## Pass gate
-
-Only mark Phase 1 complete after actual screen recording/screenshots and a report noting Fedora/GNOME version, GPU, session type, input behavior and any exceptions. Otherwise the feature remains **unverified**.
+**Trạng thái hiện tại: chưa có kết quả thử trực tiếp trên GNOME Classic 50.5.**

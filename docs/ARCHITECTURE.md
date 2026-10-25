@@ -1,69 +1,62 @@
-# Architecture decision — Fedora GNOME Wayland
+# Kiến trúc — Phase 1 GNOME Classic Wayland
 
-**Status:** Proposed architecture and technical PoC. No claim of on-device validation.
+Trạng thái: **đã thực hiện PoC ở mức source; chưa xác minh trên Fedora GNOME Classic 50.5 thật**.
 
-## Constraint
+## 1. Ràng buộc compositor
 
-GNOME Wayland does not offer arbitrary application windows an API to become the native wallpaper layer. The wlroots `wlr-layer-shell` protocol cannot be assumed to work on Mutter. The shell extension takes responsibility for placement and rendering; regular applications do not receive unrestricted window stacking permissions.
+GNOME sử dụng Mutter trên Wayland. Một cửa sổ GTK/Qt thường không thể tự ý nằm dưới mọi ứng dụng hoặc thay ảnh nền chỉ bằng một giao thức window stacking. Không giả định hỗ trợ `wlr-layer-shell` (giao thức của compositor khác). GNOME Classic vẫn dùng GNOME Shell nhưng có cấu hình session và extension khác GNOME mặc định.
 
-## Options
+Trong mã nguồn **GNOME Shell 50.4**, `js/ui/layout.js` tạo `Meta.BackgroundGroup` dưới `global.window_group` và quản lý các background actor theo monitor. Điều này hỗ trợ phương án PoC, nhưng `Main.layoutManager._backgroundGroup` là trường **private**. Không đồng nhất việc đọc mã 50.4 với xác minh nhị phân GNOME Shell **50.5** mà người dùng đang chạy.
 
-| Option | Pros | Cons | Decision |
+Tài liệu nền:
+- GNOME Shell layout 50.4: https://raw.githubusercontent.com/GNOME/gnome-shell/50.4/js/ui/layout.js
+- Extension anatomy: https://gjs.guide/extensions/overview/anatomy.html
+- Session modes: https://gjs.guide/extensions/topics/session-modes.html
+- GNOME Classic Fedora package: https://packages.fedoraproject.org/pkgs/gnome-shell-extensions/gnome-classic-session/
+
+## 2. So sánh kiến trúc
+
+| Phương án | Ưu điểm | Nhược điểm | Quyết định |
 |---|---|---|---|
-| GNOME Shell Extension (GJS/Clutter) + Rust/SQLite backend | Genuine compositor background layer; native event delivery; backend separated from compositor | Shell internals change with releases; extension bugs can affect GNOME Shell | **Selected**, gated on Phase 1 proof |
-| External GTK/Qt window, GNOME extension lowers/manages it (DING-like) | Native toolkit editors; renderer outside shell process | Complicated Wayland identity, focus and stacking integration; behaves like a window; more moving parts | Fallback research path |
-| Standalone GTK/Qt app window only | Stable toolkit; easy to debug | Does not meet wallpaper-level requirement on GNOME Wayland | Rejected for core board |
+| GNOME Shell Extension (GJS, Clutter/St) + Rust/SQLite sau này | Có thể gắn actor ở layer desktop; không giả lập wallpaper window | Phụ thuộc private API, lỗi JS ảnh hưởng Shell | **PoC được chọn**, cần test thực tế |
+| GTK4/Qt application + extension phụ trợ để tích hợp desktop | Có GUI toolkit riêng và tách logic khỏi compositor | Phải phối hợp stacking/focus trên Wayland, phức tạp và không chắc tương đương wallpaper | Phương án dự phòng cần nghiên cứu |
+| GTK4/Qt window độc lập | Dễ phát triển và debug | Không đáp ứng yêu cầu desktop layer GNOME Wayland | Không chọn |
 
-## Critical integration detail
-
-GNOME Shell 50 `js/ui/layout.js` creates `Main.layoutManager._backgroundGroup` as a child of `global.window_group` and positions it **below window actors**. Phase 1 adds an interactive `St.Widget` above wallpaper backgrounds within that group. This uses a **private** underscore-prefixed API; it is a deliberate compatibility risk, not a GNOME guarantee.
-
-Do not ship RPM or claim Phase 1 complete until pointer events, overview, monitor handling and stacking have been tested on Fedora 44 GNOME 50 Wayland. Interference from desktop-icon extensions must also be checked.
-
-## Intended system
+## 3. Sơ đồ hệ thống
 
 ```mermaid
 flowchart TD
-    Pointer[Desktop pointer events] --> Shell[GNOME Shell Extension - GJS]
-    Shell --> Canvas[Clutter board actor - view transforms]
-    Shell <-->|D-Bus, planned| Backend[Rust user backend - Phase 2]
-    Backend --> Storage[(SQLite in XDG_DATA_HOME)]
-    Backend --> Assets[Local image assets]
-    Session[GNOME user session] --> Shell
-    Session -.-> Backend
+    Pointer[Chuột trên desktop] --> Extension[GNOME Shell Extension - Phase 1]
+    Extension --> Actor[Background actor - PoC]
+    Actor --> Camera[World/screen transform]
+    Extension -. "D-Bus dự kiến Phase 2" .-> Rust[Rust user service]
+    Rust -.-> SQLite[(SQLite / XDG data)]
+    Rust -.-> Assets[Local image assets]
 ```
 
-The existing code implements only `Pointer -> Shell -> Canvas`. Dashed and Phase 2 components are proposals, not working features.
+**Đã code:** Extension, actor, camera và xử lý sự kiện. **Chưa code:** Rust, D-Bus, SQLite runtime, assets.
 
-## Planned data flow
+## 4. Cấu trúc
 
-- Create note: board interaction -> validate input in Rust service -> SQLite transaction -> notify/update rendering.
-- Move note: update geometry locally per frame -> debounced final state -> backend transaction.
-- Connect: pin-to-pin selection -> validate IDs -> persist graph edge -> repaint wire.
-- Import image: backend validates size/type -> copies to XDG assets -> persists metadata/asset.
-- Restore: login enables extension -> user service loads rows -> sends board snapshot -> restore camera/notes.
+- `extension/extension.js`: enable/disable, lỗi mount.
+- `extension/boardView.js`: actor, event handling, pointer grab, signal cleanup.
+- `extension/canvasMath.js`: logic tọa độ thuần JavaScript.
+- `extension/stylesheet.css`: charcoal, thẻ minh họa vintage.
+- `tests/`: test camera, schema SQL ở dạng thiết kế và kiểm tra package.
+- `scripts/`: cài thử và tạo ZIP.
+- `db/migrations/`: schema **chưa được sử dụng**, lưu lại như bản thiết kế Phase 2.
 
-Security: never expose arbitrary file read/write over D-Bus; validate types and paths, use user-level services only. Store `evidence.db` under `~/.local/share/evidence-note-board/`; do not mutate the installation directory.
+## 5. Quyết định kỹ thuật và rủi ro
 
-## Code boundaries
+1. Thêm actor vào background group nhưng **không sửa chính Mutter, không monkey-patch GNOME Shell**.
+2. Nếu group không tồn tại, thất bại an toàn; không tạo cửa sổ thay thế.
+3. Khi monitor thay đổi, tự điều chỉnh kích thước và đưa actor lên trên các wallpaper actor mới; vẫn giữ dưới application windows nhờ hierarchy.
+4. Chỉ grab con trỏ trong lúc middle-drag; dismiss grab khi thả chuột hoặc disable.
+5. Không lưu dữ liệu người dùng, chưa khởi chạy backend, không cần root.
+6. GNOME Classic có extension panel/dock/desktop riêng: input propagation, Overview, fullscreen, đa màn hình là **đầu mục kiểm thử chưa xác minh**.
+7. `Meta.BackgroundGroup` và `_backgroundGroup` có thể đổi giữa phiên bản GNOME; không tự suy diễn tương thích với GNOME 51.
+8. Một phiên bản Fedora chỉ được gọi là hỗ trợ sau khi kiểm thử trực tiếp, không chỉ vì CI xanh.
 
-- `extension/extension.js`: lifecycle, GNOME-specific actor and pointer interaction.
-- `extension/canvasMath.js`: pure world/screen transforms, independent of GNOME for testing.
-- `db/migrations/`: planned versioned schema; not integrated.
-- Future `backend/`: Rust repository and service layer; not created yet.
-- Future `packaging/`: RPM; not created yet.
+## 6. Acceptance gate
 
-## Key risks
-
-1. `_backgroundGroup` is private and may move, change or stop receiving events.
-2. GNOME Shell is the compositor process; buggy extension code can impair the desktop.
-3. Monitor hotplug, GNOME Overview and multiple workspaces require device-level testing.
-4. User input may be consumed by shell shortcuts/other extensions.
-5. Later IPC/database calls must not block the Shell main thread.
-
-## Evidence / references
-
-- GNOME Shell 50.4 `js/ui/layout.js`: https://raw.githubusercontent.com/GNOME/gnome-shell/50.4/js/ui/layout.js
-- GNOME extension anatomy: https://gjs.guide/extensions/overview/anatomy.html
-- GNOME debugging / Wayland nested shell: https://gjs.guide/extensions/development/debugging.html
-- Fedora 44 GNOME 50: https://fedoramagazine.org/whats-new-fedora-workstation-44/
+Cần ảnh/video hoặc báo cáo thực tế trên GNOME Classic 50.5 Wayland: board đúng layer, Firefox/Terminal ở phía trên, top bar/dock không che, zoom/pan, enable/disable, Overview, monitor change và không có lỗi GNOME Shell. Chi tiết tại [TESTING](TESTING.md). Chưa hoàn tất cho đến khi có bằng chứng này.

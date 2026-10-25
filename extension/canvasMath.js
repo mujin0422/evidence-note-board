@@ -1,9 +1,10 @@
-// Pure coordinate math shared by the GNOME extension and Node tests.
-// Canvas positions use world coordinates, never absolute screen pixels.
+// Pure world/screen transformations. GNOME Shell independent; tested by Node.
 export const MIN_ZOOM = 0.25;
-export const MAX_ZOOM = 3.0;
+export const MAX_ZOOM = 3;
 
 export function clampZoom(value) {
+    if (!Number.isFinite(value))
+        throw new RangeError('Zoom must be finite');
     return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
 }
 
