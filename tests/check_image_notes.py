@@ -8,7 +8,8 @@ backend = (root / "backend/src/db.rs").read_text(encoding="utf-8")
 assets = (root / "backend/src/assets.rs").read_text(encoding="utf-8")
 assert "ImportImageAsync" in service
 assert "Gio.Subprocess.new(" in frontend
-assert "St.TextureCache.get_default().load_file_async(" in frontend
+assert "St.TextureCache.get_default()" in frontend
+assert "texture.load_file_async(" in frontend
 assert "Clutter.ContentGravity.RESIZE_ASPECT" in frontend
 assert "new St.Icon(" not in frontend
 assert "new Gio.FileIcon" not in frontend
