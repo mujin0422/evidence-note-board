@@ -387,6 +387,7 @@ export class BoardView {
         header.add_child(new St.Label({
             text: '●', reactive: false, style_class: 'evidence-note-handle',
         }));
+        header.add_child(new St.Widget({x_expand: true, reactive: false}));
         const remove = new St.Button({label: '×', style_class: 'evidence-delete'});
         remove.connect('clicked', () => {
             if (remove.label !== 'Xóa?') {
@@ -492,7 +493,7 @@ export class BoardView {
         const [ok, lx, ly] = paper.transform_stage_point(x, y);
         if (!ok)
             return Clutter.EVENT_PROPAGATE;
-        const kind = gestureAt(lx, ly, note.width, note.height, note.type);
+        const kind = gestureAt(lx, ly, note.width, note.height, note.type, this._view.zoom);
         if (kind === 'edit')
             return Clutter.EVENT_PROPAGATE;
         if (kind === 'drag')
@@ -616,6 +617,7 @@ export class BoardView {
         bar.add_child(new St.Label({
             text: '●', reactive: false, style_class: 'evidence-note-handle',
         }));
+        bar.add_child(new St.Widget({x_expand: true, reactive: false}));
 
         const remove = new St.Button({
             label: '×',
