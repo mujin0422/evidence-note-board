@@ -1,0 +1,9 @@
+{
+  "uuid": "evidence-note-board@mujin0422.github.io",
+  "name": "Evidence Note Board (PoC)",
+  "description": "Experimental noir board embedded in the GNOME desktop background",
+  "shell-version": ["50"],
+  "session-modes": ["user"],
+  "url": "https://github.com/mujin0422/evidence-note-board",
+  "version": 1
+}

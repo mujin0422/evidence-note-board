@@ -1,0 +1,43 @@
+.evidence-board-root {
+    background-color: #151515;
+}
+
+.evidence-board-hud {
+    color: #b6aea2;
+    background-color: rgba(0, 0, 0, 0.72);
+    padding: 9px 13px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.evidence-paper {
+    padding: 16px 20px;
+    border-radius: 3px;
+    box-shadow: 0 7px 16px rgba(0, 0, 0, 0.55);
+    spacing: 8px;
+}
+
+.evidence-paper-aged {
+    background-color: #e9d898;
+}
+
+.evidence-paper-ivory {
+    background-color: #f1e9d2;
+}
+
+.evidence-pin {
+    color: #a32626;
+    font-size: 23px;
+    text-align: center;
+}
+
+.evidence-paper-title {
+    color: #443628;
+    font-size: 17px;
+    font-weight: bold;
+}
+
+.evidence-paper-body {
+    color: #514837;
+    font-size: 14px;
+}
