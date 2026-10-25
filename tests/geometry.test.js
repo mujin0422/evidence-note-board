@@ -41,6 +41,8 @@ test('invisible border gestures distinguish edit/drag/resize/rotation', () => {
     assert.equal(gestureAt(290, 190, 300, 200, 'image'), 'resize');
     assert.equal(gestureAt(120, 80, 300, 200, 'image'), 'drag');
     assert.equal(gestureAt(-20, 100, 300, 200, 'image'), 'edit');
+    assert.equal(gestureAt(270, 110, 300, 200, 'text', 0.25), 'resize');
+    assert.equal(gestureAt(8, 70, 300, 200, 'text', 0.25), 'drag');
 });
 
 test('angle wrap avoids discontinuities at +/-180°', () => {
