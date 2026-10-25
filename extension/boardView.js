@@ -381,7 +381,7 @@ export class BoardView {
         paper.set_size(note.width, note.height);
         paper.set_position(note.x, note.y);
         const header = new St.BoxLayout({
-            reactive: false, style_class: 'evidence-photo-header',
+            reactive: true, style_class: 'evidence-photo-header',
         });
         // Decorative pin, no visible drag/resize/rotate controls.
         header.add_child(new St.Label({
@@ -516,8 +516,17 @@ export class BoardView {
             const result = this._startPaperGesture(event, note, paper);
             if (result === Clutter.EVENT_STOP)
                 return result;
-            // Child Clutter.Text handles its own text cursor. Do not let
-            // existing-note clicks reach the blank-board double-click logic.
+            // Clicking blank inner paper should still focus the editor.
+            if (event.get_button() === 1 && event.get_source() === paper &&
+                note.type === 'text') {
+                const body = this._notes.get(note.id)?.body;
+                if (body) {
+                    global.stage.set_key_focus(body);
+                    body.set_cursor_position(-1);
+                }
+            }
+            // Child Clutter.Text handles its own cursor. Do not let
+            // note clicks reach the blank-board double-click recognizer.
             return event.get_button() === 1
                 ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
         });
@@ -611,7 +620,7 @@ export class BoardView {
 
         // The pin/drag handle remains separate from the editable paper area.
         const bar = new St.BoxLayout({
-            reactive: false,
+            reactive: true,
             style_class: 'evidence-note-header',
         });
         bar.add_child(new St.Label({
