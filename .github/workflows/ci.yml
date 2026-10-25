@@ -45,6 +45,10 @@ jobs:
           rustup default stable
       - name: Rust tests
         run: cargo test --manifest-path backend/Cargo.toml --all-targets
+      - name: D-Bus / SQLite smoke integration
+        run: |
+          cargo build --manifest-path backend/Cargo.toml
+          dbus-run-session -- bash scripts/test-dbus-smoke.sh
       - name: Rust release binary
         run: cargo build --manifest-path backend/Cargo.toml --release
       - name: Upload backend
