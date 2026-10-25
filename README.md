@@ -1,5 +1,34 @@
 # Evidence Note Board
 
+## Phase 5 — Production Integration (Draft)
+
+Autostart (từ Phase 2) + primary-monitor-aware toolbar, reconnect
+sau backend restart, Settings ⚙ cục bộ, culling/throttled redraw
+dây đỏ và công cụ backup/restore SQLite + image assets.
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch --track origin/feat/phase5-production-integration
+bash scripts/setup-dev.sh
+```
+
+Sau đó logout/login GNOME Wayland. Không xóa database.
+
+### Sử dụng
+
+- Nhấn **⚙** để hiện/ẩn HUD, dây đỏ và thay đổi độ nhạy zoom;
+  cấu hình lưu ở `~/.config/evidence-note-board/settings.json`.
+- Thanh công cụ di chuyển theo màn hình chính khi đổi monitor.
+- `python3 scripts/backup-board.py backup` tạo bản sao có kiểm tra
+  hash ảnh và integrity SQLite. Xem
+  [Phase 5](docs/phases/PHASE_05.md) trước khi restore.
+
+**Phase 5 chưa nghiệm thu trên Fedora multi-monitor / crash recovery.**
+Không coi CI xanh là xác nhận FPS hoặc trải nghiệm compositor.
+
+---
+
 ## Phase 4.2 — Dây đỏ và sửa thao tác ghim
 
 - **Kéo note:** giữ chuột trái trên pin để kéo, thả là dừng.
