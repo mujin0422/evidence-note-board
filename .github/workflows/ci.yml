@@ -18,8 +18,9 @@ jobs:
           node --check extension/boardView.js
           node --check extension/canvasMath.js
           node --check extension/noteService.js
+          node --check extension/doubleClickTracker.js
       - name: Camera tests
-        run: node --test tests/canvasMath.test.js
+        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py

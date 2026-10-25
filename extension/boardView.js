@@ -6,6 +6,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {panBy, screenToWorld, zoomAt} from './canvasMath.js';
 import {NoteService} from './noteService.js';
+import {DoubleClickTracker} from './doubleClickTracker.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
@@ -14,6 +15,8 @@ export class BoardView {
         this._root = null;
         this._world = null;
         this._hud = null;
+        this._createButton = null;
+        this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
         this._backgroundSignal = 0;
         this._monitorSignal = 0;
@@ -57,6 +60,22 @@ export class BoardView {
         this._hud = new St.Label({reactive: false, style_class: 'evidence-board-hud'});
         this._hud.set_position(22, 55);
         this._root.add_child(this._hud);
+
+        // Visible fallback while desktop double-click behavior is validated.
+        this._createButton = new St.Button({
+            label: '+ GHI CHÚ',
+            reactive: true,
+            can_focus: true,
+            style_class: 'evidence-create-button',
+        });
+        this._createButton.set_position(22, 98);
+        this._createButton.connect('clicked', () => {
+            const x = this._root?.width / 2;
+            const y = this._root?.height / 2;
+            if (Number.isFinite(x) && Number.isFinite(y))
+                this._createNoteAtScreen(x, y);
+        });
+        this._root.add_child(this._createButton);
         this._resize();
         this._setStatus('Đang kết nối backend…');
 
@@ -171,21 +190,50 @@ export class BoardView {
         return Clutter.EVENT_STOP;
     }
 
+    _createNoteAtScreen(x, y) {
+        if (!this._alive || !this._service) {
+            this._setStatus('BACKEND OFFLINE · kiểm tra user service');
+            return;
+        }
+        const at = screenToWorld(this._view, {x, y});
+        this._setStatus('Đang tạo ghi chú…');
+        this._service.createNote('Ghi chú mới', '', at.x, at.y)
+            .then(note => {
+                if (!this._alive)
+                    return;
+                this._renderNote(note);
+                this._setStatus('ĐÃ TẠO GHI CHÚ · click để chỉnh sửa');
+            })
+            .catch(error => {
+                console.warn('Evidence Note Board: create note failed', error.message);
+                this._saveError();
+            });
+    }
+
     _press(event) {
         if (!this._service)
             return Clutter.EVENT_PROPAGATE;
 
-        if (event.get_button() === 1 &&
-            event.get_click_count() === 2 &&
-            event.get_source() === this._root) {
+        if (event.get_button() === 1) {
+            const source = event.get_source();
+            // Never add notes when double-clicking an existing card, its editor,
+            // or the create button. Only blank canvas interactions are accepted.
+            if (source !== this._root && source !== this._world) {
+                this._doubleClick.reset();
+                return Clutter.EVENT_PROPAGATE;
+            }
             const [x, y] = event.get_coords();
-            const at = screenToWorld(this._view, {x, y});
-            this._service.createNote('Ghi chú mới', '', at.x, at.y)
-                .then(note => { if (this._alive) this._renderNote(note); })
-                .catch(() => this._saveError());
-            return Clutter.EVENT_STOP;
+            // Mutter Clutter.Event no longer exposes get_click_count().
+            // Detect consecutive primary presses using the documented
+            // get_time/get_coords methods and reject far-apart clicks.
+            if (this._doubleClick.register(event.get_time(), x, y)) {
+                this._createNoteAtScreen(x, y);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         }
 
+        this._doubleClick.reset();
         if (event.get_button() !== 2 || !this._beginGrab())
             return Clutter.EVENT_PROPAGATE;
         const [x, y] = event.get_coords();
@@ -347,6 +395,7 @@ export class BoardView {
 
     destroy() {
         this._alive = false;
+        this._doubleClick.reset();
         this._endDrag();
         for (const id of [...this._timers.keys()])
             this._flushNote(id);
@@ -371,6 +420,7 @@ export class BoardView {
         this._root = null;
         this._world = null;
         this._hud = null;
+        this._createButton = null;
         this._service = null;
         this._backgroundGroup = null;
     }
