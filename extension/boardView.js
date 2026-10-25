@@ -607,8 +607,8 @@ export class BoardView {
         const selection=body.get_selection_bound();
         const a=cursor<0?length:cursor;
         const b=selection<0?length:selection;
-        if (a===b)
-            return; // Ctrl+B without selected text is intentionally inert.
+        if (!body.get_selection() || a===b)
+            return; // No highlight: keep the text completely unchanged.
         item.boldSpans=toggleBoldSpans(item.boldSpans,
             Math.min(a,b),Math.max(a,b),length);
         this._applyBoldAttributes(item);
