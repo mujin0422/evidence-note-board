@@ -106,13 +106,6 @@ impl NoteApi {
         Ok(())
     }
 
-    fn duplicate_image(&self, id: &str, x: f64, y: f64) -> zbus::fdo::Result<String> {
-        validate_position(x, y)?;
-        let duplicate = self.with_db(|db| db.duplicate_image(id, x, y))?;
-        serde_json::to_string(&duplicate)
-            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
-    }
-
     fn delete_note(&self, id: &str) -> zbus::fdo::Result<()> {
         if !self.with_db(|db| db.delete_note(id))? {
             return Err(zbus::fdo::Error::Failed("Note not found".into()));
