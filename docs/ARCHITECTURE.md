@@ -84,3 +84,17 @@ sequenceDiagram
 GNOME Classic 50.5 pointer/focus/input, `Clutter.Text` multiline editing, `Gio.DBusProxy` introspection trên session thật, systemd user service cài trên Fedora, crash recovery, clipboard/IME tiếng Việt, race khi logout lúc debounce, shell/GPU đa màn hình, benchmark. Không đưa các mục đó vào nhóm 'PASS' chỉ dựa trên source hoặc CI.
 
 Tài liệu API: https://gjs.guide/guides/gio/dbus.html · https://docs.rs/zbus/latest/zbus/ · https://docs.rs/rusqlite/latest/rusqlite/
+
+## Phase 3 — Image asset pipeline (đang thử nghiệm)
+
+`Zenity chọn file -> GJS ImportImage(path,x,y) async -> Rust validate
+format/dimensions -> copy assets/UUID.ext -> SQLite transaction -> JSON
+note -> GNOME St.Icon Gio.FileIcon`.
+
+SQLite schema Phase 1 đã có `assets` (file_path, mime, width, height,
+checksum). Phase 3 tái dùng schema v1, không nâng user_version. File ảnh
+được lưu theo UUID do backend tạo để tránh ghi đè và path traversal.
+Phía compositor không giải mã ảnh nguồn trước khi nhập; GJS chỉ hiển thị
+bản sao đã được Rust xác minh. Nút file picker dùng Zenity process không
+block GNOME Shell. Đây chưa phải kiến trúc release cuối cùng; portal
+FileChooser được cân nhắc thay Zenity ở Phase 5.

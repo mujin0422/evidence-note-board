@@ -29,6 +29,7 @@ jobs:
           python3 tests/check_extension.py
           python3 tests/check_gnome50_api.py
           python3 tests/check_note_editor.py
+          python3 tests/check_image_notes.py
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh
       - name: Package
         run: |

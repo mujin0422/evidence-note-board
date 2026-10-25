@@ -8,6 +8,10 @@ const XML = `<node>
       <arg type="d" direction="in"/><arg type="d" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
+    <method name="ImportImage">
+      <arg type="s" direction="in"/><arg type="d" direction="in"/>
+      <arg type="d" direction="in"/><arg type="s" direction="out"/>
+    </method>
     <method name="UpdateNote">
       <arg type="s" direction="in"/><arg type="s" direction="in"/>
       <arg type="s" direction="in"/>
@@ -70,6 +74,13 @@ export class NoteService {
     createNote(title, content, x, y) {
         return this._enqueue(async () => {
             const [payload] = await this._proxy.CreateNoteAsync(title, content, x, y);
+            return JSON.parse(payload);
+        });
+    }
+
+    importImage(filePath, x, y) {
+        return this._enqueue(async () => {
+            const [payload] = await this._proxy.ImportImageAsync(filePath, x, y);
             return JSON.parse(payload);
         });
     }

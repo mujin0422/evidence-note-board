@@ -86,3 +86,11 @@ xem [PHASE_02](phases/PHASE_02.md).
   vào giấy, Enter tạo ba dòng, không có viền đỏ, logout/login giữ nguyên;
   note cũ với title đã nhập vẫn hiển thị và lưu lại.
 - Rust backend và SQLite schema không đổi, không xóa hoặc reset dữ liệu.
+
+## Phase 3 — Image note test plan
+
+Xem [PHASE_03](phases/PHASE_03.md). Kiểm tra Rust test import/tồn tại sau
+restart/xóa bản sao file + source untouched, Python static và kiểm thử
+Fedora GNOME Classic 50.5 thực tế. Ảnh PNG/JPEG/WebP, đường dẫn có dấu
+tiếng Việt, cancel chọn ảnh, asset size-limit, kéo/xóa/relogin; so sánh
+note cũ Phase 2 không thay đổi.
