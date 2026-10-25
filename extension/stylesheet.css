@@ -61,8 +61,25 @@
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
 }
 .evidence-photo-header {
-    spacing: 12px;
+    spacing: 4px;
 }
 .evidence-photo-image {
     padding: 0;
+}
+
+.evidence-photo-action {
+    color: #5c392b;
+    background-color: transparent;
+    border: none;
+    padding: 0 3px;
+    font-size: 14px;
+}
+.evidence-photo-action:hover {
+    color: #992c22;
+}
+.evidence-resize-handle {
+    color: #5e382e;
+    font-size: 17px;
+    font-weight: bold;
+    padding: 0 4px;
 }

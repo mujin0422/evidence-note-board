@@ -37,6 +37,16 @@ fn validate_position(x: f64, y: f64) -> zbus::fdo::Result<()> {
     Ok(())
 }
 
+fn validate_geometry(width: f64, height: f64, rotation: f64) -> zbus::fdo::Result<()> {
+    if !width.is_finite() || !height.is_finite() || !rotation.is_finite() ||
+        !(180.0..=1200.0).contains(&width) ||
+        !(110.0..=6000.0).contains(&height) ||
+        !(-180.0..=180.0).contains(&rotation) {
+        return Err(zbus::fdo::Error::InvalidArgs("Invalid note geometry".into()));
+    }
+    Ok(())
+}
+
 fn validate_view(zoom: f64, x: f64, y: f64) -> zbus::fdo::Result<()> {
     validate_position(x, y)?;
     if !zoom.is_finite() || !(0.25..=3.0).contains(&zoom) {
@@ -85,6 +95,22 @@ impl NoteApi {
             return Err(zbus::fdo::Error::Failed("Note not found".into()));
         }
         Ok(())
+    }
+
+    fn update_geometry(&self, id: &str, width: f64, height: f64, rotation: f64)
+        -> zbus::fdo::Result<()> {
+        validate_geometry(width, height, rotation)?;
+        if !self.with_db(|db| db.update_geometry(id, width, height, rotation))? {
+            return Err(zbus::fdo::Error::Failed("Note not found".into()));
+        }
+        Ok(())
+    }
+
+    fn duplicate_image(&self, id: &str, x: f64, y: f64) -> zbus::fdo::Result<String> {
+        validate_position(x, y)?;
+        let duplicate = self.with_db(|db| db.duplicate_image(id, x, y))?;
+        serde_json::to_string(&duplicate)
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
     fn delete_note(&self, id: &str) -> zbus::fdo::Result<()> {
@@ -145,5 +171,8 @@ mod tests {
         assert!(validate_view(3.1, 0.0, 0.0).is_err());
         assert!(validate_view(0.25, -120.0, 300.0).is_ok());
         assert!(validate_text("ok", &"a".repeat(65537)).is_err());
+        assert!(validate_geometry(180.0, 110.0, 0.0).is_ok());
+        assert!(validate_geometry(179.0, 110.0, 0.0).is_err());
+        assert!(validate_geometry(350.0, 310.0, f64::NAN).is_err());
     }
 }

@@ -73,3 +73,50 @@ sẽ tự khởi động backend khi đăng nhập và tự reconnect khi servic
 tránh phải chạy lệnh `systemctl` trước khi nhấn `+ ẢNH`.
 Dữ liệu image notes và assets cũ được giữ nguyên; cần kiểm thử trên
 GNOME Classic 50.5 trước khi nghiệm thu. Xem [AUTOSTART](../AUTOSTART.md).
+
+## Giai đoạn bổ sung — Resize, Rotate, Duplicate, kéo file ảnh
+
+Đã thêm trong branch `feat/phase3-resize-rotate-duplicate-drop`:
+
+- **Ảnh**: thao tác giữ/kéo ký hiệu `↘` trên thanh ảnh để đổi kích thước,
+  tự giữ tỉ lệ chiều rộng/chiều cao; hai nút `↶/↷` xoay 15° và
+  `⧉` nhân bản bản in, mỗi bản sở hữu asset riêng. Tọa độ, kích
+  thước, góc xoay lưu SQLite qua `UpdateGeometry`.
+- **Ghi chú chữ**: kéo `↔` trên thanh note để thay đổi **chỉ chiều rộng**;
+  chiều cao note tự co giãn tối thiểu theo số dòng thực của Pango layout.
+  Khi đổi chiều ngang, nội dung reflow và chiều cao được đo lại.
+- **Kéo file từ Nautilus**: nút `⇩ THẢ ẢNH` mở cửa sổ nhỏ GTK4
+  riêng biệt, hỗ trợ kéo 1–12 file ảnh từ Files/Nautilus vào. GTK
+  cung cấp `Gdk.FileList` và gửi danh sách path qua stdout JSON cho
+  GNOME Extension nhập bằng D-Bus. Tránh cố gắng dùng
+  `Gtk.DropTarget` trên `Clutter.Actor`, không tương thích với
+  Wayland drag offer cho client khác.
+- Không có thay đổi phá vỡ DB schema hiện tại. Đường dẫn asset bản sao
+  chỉ được lấy từ backend, không tạo URL mạng.
+- Gói Fedora có thể cần `sudo dnf install gtk4 python3-gobject`
+  bên cạnh `zenity`.
+
+**Giới hạn có chủ ý:** hiện thả vào **cửa sổ nhận ảnh GTK**, không
+thả trực tiếp lên wallpaper/board, vì GNOME Shell actor không phải
+GdkSurface nhận GTK Wayland DND. Điều này vẫn là yêu cầu UX chưa hoàn tất
+nếu cần thả trực tiếp vào mặt board. Clipboard cũng chưa làm.
+
+### Kiểm tra trên Fedora GNOME Classic 50.5
+
+- [ ] Bản lưu text dài làm giấy dãn xuống; xóa bớt chữ thì giấy co lại,
+  không thấp hơn chiều cao mặc định.
+- [ ] Resize chiều ngang note bằng `↔` và Enter nhiều dòng; chiều cao
+  tự đổi tương ứng, dữ liệu còn sau logout.
+- [ ] Resize ảnh bằng `↘`, aspect ratio không đổi, khôi phục sau login.
+- [ ] Xoay ảnh bằng `↶` hoặc `↷`, góc xoay lưu/khôi phục.
+- [ ] Nhân bản bằng `⧉`, xóa ảnh gốc không làm mất bản sao.
+- [ ] Mở `⇩ THẢ ẢNH`, kéo PNG, JPEG, WebP từ Nautilus vào cửa sổ,
+  nhiều ảnh được tạo trên board.
+- [ ] Hủy/đóng cửa sổ, không có ảnh giả xuất hiện trên board.
+- [ ] Zoom 25%/100% khi kéo resize; double-click/middle-pan không regress.
+- [ ] Service tự khởi chạy và toàn bộ note + image assets không biến mất
+  khi đăng xuất/đăng nhập lại.
+
+**Chỉ đánh dấu Phase 3 hoàn thành sau khi kiểm thử trên máy**, không chỉ
+sau CI. Nếu người dùng yêu cầu thả trực tiếp lên board, cần nghiên cứu
+Wayland compositor drop bridge riêng; không giả lập hoặc tuyên bố đã hỗ trợ.
