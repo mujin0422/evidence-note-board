@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pinCenter, worldToScreen, menuNearPin, stringGeometry, nearestTargetPin}
+import {pinCenter, worldToScreen, menuNearPin, stringGeometry, stringControlPoints, nearestTargetPin}
     from '../extension/stringMath.js';
 
 const first = {id:'a',x:100,y:200,width:270,height:185,rotation:0};
@@ -37,4 +37,12 @@ test('pin hit-test respects zoom and rejects the source itself', () => {
     const screen = worldToScreen(view,pinCenter(second));
     assert.equal(nearestTargetPin([first,second],view,screen,'a'),'b');
     assert.equal(nearestTargetPin([first,second],view,screen,'b'),null);
+});
+
+test('string control points work for exact world-space cursor positions', () => {
+    const a={x:120,y:200}, b={x:650,y:300};
+    const g=stringControlPoints(a,b);
+    assert.deepEqual(g.a,a);
+    assert.deepEqual(g.b,b);
+    assert.ok(g.c1.y>200 && g.c2.y>200);
 });

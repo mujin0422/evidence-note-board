@@ -30,13 +30,15 @@ export function menuNearPin(note, view, viewport, width = 198, height = 136) {
     return {x, y};
 }
 
-export function stringGeometry(first, second) {
-    const a = pinCenter(first);
-    const b = pinCenter(second);
+export function stringControlPoints(a, b) {
     const dx = b.x - a.x, dy = b.y - a.y;
     const sag = Math.min(72, Math.hypot(dx, dy) * .12);
     return {a, b, c1: {x: a.x + dx * .32, y: a.y + dy * .32 + sag},
         c2: {x: a.x + dx * .68, y: a.y + dy * .68 + sag}};
+}
+
+export function stringGeometry(first, second) {
+    return stringControlPoints(pinCenter(first), pinCenter(second));
 }
 
 export function nearestTargetPin(notes, view, screen, excludedId,

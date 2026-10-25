@@ -12,7 +12,7 @@ import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
 import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
 import {PIN_SIZE, pinPosition} from './pinMath.js';
-import {pinCenter, menuNearPin, stringGeometry, nearestTargetPin}
+import {pinCenter, menuNearPin, stringControlPoints, nearestTargetPin}
     from './stringMath.js';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
 
@@ -586,11 +586,7 @@ export class BoardView {
         const cr = area.get_context();
         try {
             const draw = (a, b, isDraft = false) => {
-                const g = stringGeometry(
-                    {x: a.x - 100, y: a.y, width: 200, height: 0, rotation: 0},
-                    {x: b.x - 100, y: b.y, width: 200, height: 0, rotation: 0});
-                // Inputs above are already world-space centers and height=0,
-                // so stringGeometry anchors exactly at a and b.
+                const g = stringControlPoints(a, b);
                 cr.moveTo(g.a.x, g.a.y);
                 cr.curveTo(g.c1.x, g.c1.y, g.c2.x, g.c2.y, g.b.x, g.b.y);
                 cr.setSourceRGBA(0.12, 0.015, 0.015, 0.8);
