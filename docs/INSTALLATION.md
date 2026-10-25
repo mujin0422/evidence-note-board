@@ -1,5 +1,21 @@
 # INSTALLATION — Fedora GNOME Classic 50.5 / Wayland
 
+## Cách cài được khuyến nghị: một lần và tự chạy sau login
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch --track origin/fix/backend-autostart-and-reconnect
+bash scripts/setup-dev.sh
+```
+
+Sau khi GNOME Wayland nạp lại extension, backend sẽ tự chạy nhờ
+`systemd --user`, có D-Bus activation dự phòng và tự reconnect.
+Bạn không cần chạy thủ công `daemon-reload`, `enable`,
+`restart` nữa. Xem [AUTOSTART](AUTOSTART.md) để xác minh tự chạy.
+
+---
+
 **Lưu ý:** Đây là build từ source, không có RPM. Đừng thử trên desktop quan trọng khi chưa có backup/sẵn phương án disable extension.
 
 ## 1. Kiểm tra môi trường
@@ -12,13 +28,13 @@ echo "$XDG_CURRENT_DESKTOP"
 
 Mục tiêu `GNOME Shell 50.5`, `wayland`, session **GNOME Classic**. Cài công cụ phát triển khi thiếu: `sudo dnf install rust cargo gcc git gnome-extensions-app` (tên gói có thể thay đổi; kiểm tra với `dnf search`). Không dùng root để chạy service.
 
-## 2. Checkout branch Phase 2
+## 2. Checkout branch cho phát triển từng phase
 
 ```bash
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
 git fetch origin
-git switch --track origin/feat/phase2-text-notes-persistence
+git switch dev  # hoặc chuyển tới feature branch đang thử nghiệm
 ```
 
 Sau khi PR được **bạn** merge, thay branch ở trên bằng `dev`.
@@ -52,7 +68,7 @@ journalctl --user -u evidence-note-board.service -b --no-pager
 journalctl --user -b | grep -i 'evidence-note-board'
 ```
 
-Nếu thông báo `BACKEND OFFLINE`: kiểm tra service, sau đó disable/re-enable extension. Không log thông tin cá nhân/nội dung note.
+Nếu thông báo `BACKEND OFFLINE`: xem trạng thái systemd service. Với bản autostart mới, extension phải tự kết nối lại khi D-Bus xuất hiện. Không log thông tin cá nhân/nội dung note.
 
 ## 6. Sao lưu, gỡ
 
@@ -73,6 +89,7 @@ gnome-extensions disable evidence-note-board@mujin0422.github.io
 systemctl --user disable --now evidence-note-board.service
 rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/evidence-note-board@mujin0422.github.io"
 rm -f "$HOME/.config/systemd/user/evidence-note-board.service"
+rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services/io.github.mujin0422.EvidenceNoteBoard.service"
 rm -f "$HOME/.local/bin/evidence-note-boardd"
 systemctl --user daemon-reload
 ```

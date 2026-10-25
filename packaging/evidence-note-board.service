@@ -1,9 +1,11 @@
 [Unit]
-Description=Evidence Note Board user-local SQLite/D-Bus backend
+Description=Evidence Note Board local SQLite and D-Bus backend
 After=dbus.socket
 
 [Service]
-Type=simple
+# Wait until the session bus name has been acquired before reporting ready.
+Type=dbus
+BusName=io.github.mujin0422.EvidenceNoteBoard
 ExecStart=%h/.local/bin/evidence-note-boardd
 Restart=on-failure
 RestartSec=2
@@ -11,4 +13,5 @@ NoNewPrivileges=true
 UMask=0077
 
 [Install]
+# Starts automatically with the user's systemd session (not as root).
 WantedBy=default.target

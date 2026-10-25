@@ -35,6 +35,8 @@ export class BoardView {
         this._timers = new Map();
         this._viewTimer = 0;
         this._service = null;
+        this._backendWatchId = 0;
+        this._connectionRevision = 0;
         this._alive = false;
         this._saving = false;
     }
@@ -110,19 +112,41 @@ export class BoardView {
         for (const name of ['notify::width', 'notify::height'])
             this._stageSignals.push(global.stage.connect(name, () => this._resize()));
 
-        // Keep the shell responsive even when the user service is missing.
-        this._connectBackend().catch(error => {
-            if (this._alive) {
-                console.warn('Evidence Note Board: backend connection failed', error.message);
-                this._setStatus('BACKEND OFFLINE · chạy scripts/install-backend-dev.sh');
+        // AUTO_START uses the per-user D-Bus activation entry if the
+        // backend has not started yet. Name-owner changes make reconnection
+        // automatic when systemd restarts it after a crash.
+        this._backendWatchId = Gio.bus_watch_name(
+            Gio.BusType.SESSION,
+            'io.github.mujin0422.EvidenceNoteBoard',
+            Gio.BusNameWatcherFlags.AUTO_START,
+            () => {
+                if (!this._alive)
+                    return;
+                this._setStatus('Đang kết nối backend…');
+                this._connectBackend().catch(error => {
+                    if (this._alive) {
+                        console.warn('Evidence Note Board: backend connection failed', error.message);
+                        this._setStatus('BACKEND OFFLINE · kiểm tra systemd --user');
+                    }
+                });
+            },
+            () => {
+                if (!this._alive)
+                    return;
+                this._connectionRevision++;
+                this._service = null;
+                // Preserve existing note actors and unsaved text on screen.
+                this._setStatus('BACKEND OFFLINE · đang chờ tự kết nối lại');
             }
-        });
+        );
     }
 
     async _connectBackend() {
+        const revision = ++this._connectionRevision;
         const service = await NoteService.connect();
         const [notes, view] = await Promise.all([service.listNotes(), service.getView()]);
-        if (!this._alive)
+        // A backend restart or extension disable invalidates in-flight RPCs.
+        if (!this._alive || revision !== this._connectionRevision)
             return;
         this._service = service;
         if (Number.isFinite(view.zoom) && view.zoom >= 0.25 && view.zoom <= 3 &&
@@ -596,6 +620,11 @@ export class BoardView {
 
     destroy() {
         this._alive = false;
+        this._connectionRevision++;
+        if (this._backendWatchId) {
+            Gio.bus_unwatch_name(this._backendWatchId);
+            this._backendWatchId = 0;
+        }
         this._imagePicker?.force_exit();
         this._imagePicker = null;
         this._doubleClick.reset();

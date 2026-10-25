@@ -177,3 +177,20 @@ Các checklist trước đây còn ô chưa đánh dấu là lịch sử của q
 lỗi, không phản ánh kết quả nghiệm thu mới này. Các mục cần thử thêm ở
 Phase 5: nhiều màn hình, crash recovery, IME đặc biệt, trường hợp service
 khởi động chậm và hiệu năng lớn.
+
+## Bản vá hậu nghiệm thu — backend tự chạy khi đăng nhập
+
+Theo phản hồi sau nghiệm thu MVP, người dùng phải chạy thủ công
+`systemctl --user daemon-reload/enable --now/restart/status` do
+backend không luôn sẵn sàng cùng lúc extension được bật.
+
+Đã bổ sung user systemd service `Type=dbus`, activation entry
+`SystemdService=evidence-note-board.service`, script `setup-dev.sh`
+và extension theo dõi trạng thái tên D-Bus, tự reconnect sau restart.
+Database schema và note hiện có không đổi.
+
+Cần kiểm tra trên Fedora: sau logout/login service tự active;
+nhấn nút tạo được ngay; khi `systemctl --user restart` backend thì
+board tự nối lại không cần disable/enable extension. Xem
+[docs/AUTOSTART.md](../AUTOSTART.md). Hành vi này chưa được coi là
+pass nếu mới có CI.
