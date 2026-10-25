@@ -11,7 +11,7 @@ assert "this._service.deleteNote(id)" in js
 assert "this._service?.deleteNote(note.id)" not in js
 assert "new St.Button({label: '×'" not in js
 assert "this._startNoteDrag(event, note)" in js
-assert "return Clutter.EVENT_STOP; // Phase 4: move by pin only" in js
+assert "return this._startNoteDrag(event,note); // Hold to drag, no pan." in js
 assert "this._applyGeometry(this._dragNote);" in js
 assert "event.get_button() === 3" in js
 assert "_deletingNotes.has(note.id)" in js
