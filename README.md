@@ -1,5 +1,30 @@
 # Evidence Note Board
 
+## Phase 5 — Thao tác tối giản, board giới hạn một màn hình
+
+- **Nhấp đúp vùng trống:** tạo note văn bản.
+- **Giữ Ctrl + nhấp đúp vùng trống:** chọn ảnh PNG/JPEG/WebP.
+- **Giữ chuột trái trên pin hoặc mép giấy/ảnh và kéo:** di chuyển trong board.
+- Đã bỏ nút `+ GHI CHÚ`, `+ ẢNH` và thao tác chuột giữa pan.
+- Khi kéo, resize, rotate và khôi phục, cả giấy/ảnh và pin được giới hạn
+  trong board. Các note cũ nằm ngoài viewport được đưa trở lại. Không
+  xóa ảnh, note hoặc dây đỏ trong SQLite.
+- **Ctrl + lăn chuột:** zoom không pan. Khi zoom lớn hơn khiến nội dung
+  vượt khỏi màn hình, mức zoom được giới hạn lại.
+- **⚙ Settings:** HUD, dây đỏ và nút **Zoom 100%**; đã bỏ lựa chọn tốc độ zoom.
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch -c feat/phase5-gesture-board-bounds --track origin/feat/phase5-gesture-board-bounds
+bash scripts/setup-dev.sh
+```
+Đăng xuất/đăng nhập GNOME Classic Wayland một lần để extension nhận mã
+mới. Bản này là Draft PR, cần nghiệm thu trên Fedora trước khi merge.
+Xem [Phase 5](docs/phases/PHASE_05.md).
+
+---
+
 ## Phase 5 — Single-screen Production Integration
 
 Autostart (từ Phase 2), **bố cục một màn hình duy nhất**,

@@ -8,21 +8,21 @@ export class DoubleClickTracker {
         this._last = null;
     }
 
-    register(time, x, y) {
+    register(time, x, y, mode = 'text') {
         if (![time, x, y].every(Number.isFinite)) {
             this.reset();
             return false;
         }
 
         const previous = this._last;
-        this._last = {time, x, y};
+        this._last = {time, x, y, mode};
         if (!previous)
             return false;
 
         const elapsed = time - previous.time;
         const dx = x - previous.x;
         const dy = y - previous.y;
-        if (elapsed >= 0 && elapsed <= this._delay &&
+        if (previous.mode === mode && elapsed >= 0 && elapsed <= this._delay &&
             dx * dx + dy * dy <= this._distance2) {
             // Consuming the gesture ensures a third press cannot add a
             // duplicate note.

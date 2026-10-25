@@ -6,7 +6,8 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {panBy, screenToWorld, zoomAt} from './canvasMath.js';
+import {screenToWorld} from './canvasMath.js';
+import {confineNote, maxZoomThatFits, validBoardPoint} from './boardBounds.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
@@ -25,8 +26,6 @@ export class BoardView {
         this._root = null;
         this._world = null;
         this._hud = null;
-        this._createButton = null;
-        this._imageButton = null;
         this._imagePicker = null;
         this._settingsButton = null;
         this._settingsMenu = null;
@@ -36,6 +35,7 @@ export class BoardView {
         this._reconnectTimer = 0;
         this._reconnectAttempts = 0;
         this._paintTimer = 0;
+        this._resizeTimer = 0;
         this._resizeSession = null;
         this._pinMenu = null;
         this._stringsLayer = null;
@@ -103,30 +103,7 @@ export class BoardView {
         this._hud.set_position(22, 55);
         this._root.add_child(this._hud);
 
-        // Visible fallback while desktop double-click behavior is validated.
-        this._createButton = new St.Button({
-            label: '+ GHI CHÚ',
-            reactive: true,
-            can_focus: true,
-            style_class: 'evidence-create-button',
-        });
-        this._createButton.set_position(22, 98);
-        this._createButton.connect('clicked', () => {
-            const {x,y}=singleScreenLayout(global.stage.width,global.stage.height).center;
-            if (Number.isFinite(x) && Number.isFinite(y))
-                this._createNoteAtScreen(x, y);
-        });
-        this._root.add_child(this._createButton);
-
-        this._imageButton = new St.Button({
-            label: '+ ẢNH',
-            reactive: true,
-            can_focus: true,
-            style_class: 'evidence-create-button evidence-image-button',
-        });
-        this._imageButton.set_position(150, 98);
-        this._imageButton.connect('clicked', () => this._chooseImage());
-        this._root.add_child(this._imageButton);
+        // Double-click empty board for text; Ctrl+double-click for image.
         this._settingsButton = new St.Button({
             label: '⚙', reactive: true, can_focus: true,
             style_class: 'evidence-create-button evidence-settings-button',
@@ -205,11 +182,16 @@ export class BoardView {
         this._applyPreferences();
         this._connections = new Map(connections.map(c => [c.id, c]));
         this._queueStrings();
-        if (!this._dirtyView && Number.isFinite(view.zoom) && view.zoom >= 0.25 && view.zoom <= 3 &&
-            Number.isFinite(view.pan_x) && Number.isFinite(view.pan_y)) {
-            this._view = {zoom: view.zoom, panX: view.pan_x, panY: view.pan_y};
-        }
+        // Retire pan offsets saved by older releases.
+        const requestedZoom=!this._dirtyView && Number.isFinite(view.zoom)
+            ? Math.max(0.25,Math.min(3,view.zoom)) : this._view.zoom;
+        const maxZoom=maxZoomThatFits(notes.map(n=>
+            confineNote(n,global.stage.width,global.stage.height,1)),
+            global.stage.width,global.stage.height);
+        this._view={zoom:Math.min(requestedZoom,maxZoom),panX:0,panY:0};
         this._applyView();
+        if (view.pan_x!==0 || view.pan_y!==0 || view.zoom!==this._view.zoom)
+            this._scheduleView();
         let restored = 0;
         let failed = 0;
         for (const note of notes) {
@@ -228,7 +210,7 @@ export class BoardView {
         if (failed)
             this._setStatus(`LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`);
         else
-            this._setStatus(`P2.4 · SẴN SÀNG · ${restored} ghi chú · double-click hoặc + GHI CHÚ`);
+            this._setStatus(`SẴN SÀNG · ${restored} ghi chú · double-click: note · Ctrl+double-click: ảnh`);
     }
 
     _scheduleReconnect() {
@@ -300,18 +282,15 @@ export class BoardView {
         action(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
                 show_strings:!this._preferences.show_strings}));
-        action(`Zoom: ${this._preferences.zoom_step>1.15?'Nhanh':'Vừa'}`,
-            ()=>this._savePreferences({...this._preferences,
-                zoom_step:this._preferences.zoom_step>1.15?1.1:1.25}));
         action('Zoom 100%',()=>{
-            const point=singleScreenLayout(global.stage.width,global.stage.height).center;
-            this._view=zoomAt(this._view,point,1);
+            this._view={zoom:1,panX:0,panY:0};
+            this._confineAllNotes(true);
             this._applyView();
             this._scheduleView();
             this._closeSettingsMenu();
         });
         action('Đóng',()=>this._closeSettingsMenu());
-        menu.set_size(212,240);
+        menu.set_size(212,198);
         this._root.add_child(menu);
         this._settingsMenu=menu;
         const [x,y]=this._settingsButton.get_position();
@@ -334,14 +313,31 @@ export class BoardView {
         // Single-screen mode: toolbar remains at fixed stage coordinates.
         const c=singleScreenLayout(global.stage.width,global.stage.height);
         this._hud?.set_position(c.hud.x,c.hud.y);
-        this._createButton?.set_position(c.text.x,c.text.y);
-        this._imageButton?.set_position(c.image.x,c.image.y);
         this._settingsButton?.set_position(c.settings.x,c.settings.y);
         this._closeSettingsMenu();
         if (this._stringsLayer) {
             this._stringsLayer.set_size(global.stage.width, global.stage.height);
             this._queueStrings();
         }
+        // A compositor resize may report intermediate allocations during
+        // mode changes. Debounce before mutating/persisting note positions.
+        if (this._resizeTimer)
+            GLib.Source.remove(this._resizeTimer);
+        this._resizeTimer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,150,()=>{
+            this._resizeTimer=0;
+            if (this._alive && global.stage.width >= 400 && global.stage.height >= 300) {
+                const limit=maxZoomThatFits(
+                    [...this._notes.values()].map(item=>item.note),
+                    global.stage.width,global.stage.height);
+                if (this._view.zoom>limit) {
+                    this._view={zoom:limit,panX:0,panY:0};
+                    this._applyView();
+                    this._scheduleView();
+                }
+                this._confineAllNotes(true);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
         this._positionPinMenu();
     }
 
@@ -349,9 +345,9 @@ export class BoardView {
         if (!this._world)
             return;
         this._world.set_scale(this._view.zoom, this._view.zoom);
-        this._world.set_position(this._view.panX, this._view.panY);
+        this._world.set_position(0,0);
         if (this._service)
-            this._setStatus('Ctrl+Wheel: zoom · chuột giữa: pan');
+            this._setStatus('Ctrl+Wheel: zoom · giữ/kéo pin hoặc mép giấy');
         this._positionPinMenu();
         this._queueStrings();
     }
@@ -393,25 +389,59 @@ export class BoardView {
     _scroll(event) {
         if (!this._service || !(event.get_state() & Clutter.ModifierType.CONTROL_MASK))
             return Clutter.EVENT_PROPAGATE;
-        const direction = event.get_scroll_direction();
+        const direction=event.get_scroll_direction();
         let factor;
-        if (direction === Clutter.ScrollDirection.UP)
-            factor = this._preferences.zoom_step;
-        else if (direction === Clutter.ScrollDirection.DOWN)
-            factor = 1 / this._preferences.zoom_step;
-        else if (direction === Clutter.ScrollDirection.SMOOTH) {
-            const [, dy] = event.get_scroll_delta();
-            factor = Math.exp(-dy * Math.log(this._preferences.zoom_step) * 1.36);
+        if (direction===Clutter.ScrollDirection.UP)
+            factor=1.1;
+        else if (direction===Clutter.ScrollDirection.DOWN)
+            factor=1/1.1;
+        else if (direction===Clutter.ScrollDirection.SMOOTH) {
+            const [,dy]=event.get_scroll_delta();
+            factor=Math.exp(-dy*0.13);
         } else {
             return Clutter.EVENT_PROPAGATE;
         }
-        if (!Number.isFinite(factor) || factor <= 0)
+        if (!Number.isFinite(factor)||factor<=0)
             return Clutter.EVENT_PROPAGATE;
-        const [x, y] = event.get_coords();
-        this._view = zoomAt(this._view, {x, y}, this._view.zoom * factor);
+        // Zoom from origin only. Never change panX/panY; stop zooming in
+        // before any paper or pin could leave the physical viewport.
+        const maxZoom=maxZoomThatFits(
+            [...this._notes.values()].map(item=>item.note),
+            global.stage.width,global.stage.height);
+        const zoom=Math.max(0.25,Math.min(maxZoom,this._view.zoom*factor));
+        if (Math.abs(zoom-this._view.zoom)<0.00001)
+            return Clutter.EVENT_STOP;
+        this._view={zoom,panX:0,panY:0};
         this._applyView();
         this._scheduleView();
         return Clutter.EVENT_STOP;
+    }
+
+    _confineGeometry(note,persist=false) {
+        if (!(global.stage.width>0 && global.stage.height>0))
+            return;
+        const previous={x:note.x,y:note.y,width:note.width,height:note.height};
+        const fixed=confineNote(note,global.stage.width,global.stage.height,this._view.zoom);
+        Object.assign(note,{x:fixed.x,y:fixed.y,
+            width:fixed.width,height:fixed.height});
+        if (persist && this._service) {
+            if (note.x!==previous.x || note.y!==previous.y)
+                this._service.moveNote(note.id,note.x,note.y)
+                    .catch(()=>this._saveError());
+            if (note.width!==previous.width || note.height!==previous.height)
+                this._service.updateGeometry(note.id,note.width,note.height,note.rotation)
+                    .catch(()=>this._saveError());
+        }
+    }
+
+    _confineAllNotes(persist=false) {
+        if (!this._notes)
+            return;
+        for (const item of this._notes.values()) {
+            this._confineGeometry(item.note,persist);
+            item.actor.set_position(item.note.x,item.note.y);
+            this._applyGeometry(item.note);
+        }
     }
 
     _createNoteAtScreen(x, y) {
@@ -419,6 +449,8 @@ export class BoardView {
             this._setStatus('BACKEND OFFLINE · kiểm tra user service');
             return;
         }
+        if (!validBoardPoint({x,y},global.stage.width,global.stage.height))
+            return;
         const at = screenToWorld(this._view, {x, y});
         this._setStatus('Đang tạo ghi chú…');
         this._service.createNote('', '', at.x, at.y)
@@ -430,7 +462,7 @@ export class BoardView {
                 // multiple invisible records by retrying).
                 try {
                     this._renderNote(note, true);
-                    this._setStatus('P2.4 · ĐÃ TẠO GHI CHÚ · nhập trực tiếp trên giấy');
+                    this._setStatus('ĐÃ TẠO GHI CHÚ · nhập trực tiếp trên giấy');
                 } catch (error) {
                     console.error(error, 'Evidence Note Board: saved note but rendering failed');
                     this._setStatus('ĐÃ LƯU NHƯNG LỖI HIỂN THỊ · xem journalctl');
@@ -442,7 +474,7 @@ export class BoardView {
             });
     }
 
-    async _chooseImage() {
+    async _chooseImage(screenPoint=null) {
         if (!this._service || !this._alive) {
             this._setStatus('BACKEND OFFLINE · không thể nhập ảnh');
             return;
@@ -479,9 +511,9 @@ export class BoardView {
             const selected = stdout.trim();
             if (!selected)
                 return;
-            const at = screenToWorld(this._view, {
-                ...singleScreenLayout(global.stage.width,global.stage.height).center,
-            });
+            const point=screenPoint ??
+                singleScreenLayout(global.stage.width,global.stage.height).center;
+            const at=screenToWorld(this._view,point);
             this._setStatus('Đang nhập ảnh vào bộ nhớ cục bộ…');
             const note = await this._service.importImage(selected, at.x, at.y);
             if (!this._alive)
@@ -507,6 +539,8 @@ export class BoardView {
         const item = this._notes.get(note.id);
         if (!item)
             return;
+        this._confineGeometry(note);
+        item.actor.set_position(note.x,note.y);
         item.actor.set_size(note.width, note.height);
         if (item.pin) {
             const point = pinPosition(note);
@@ -535,7 +569,8 @@ export class BoardView {
         if (!layout)
             return;
         const [, pixels] = layout.get_pixel_size();
-        const required = requiredPaperHeight(pixels);
+        const required=Math.min(requiredPaperHeight(pixels),
+            Math.max(185,global.stage.height/this._view.zoom-60));
         if (note.height !== required) {
             note.height = required;
             this._applyGeometry(note);
@@ -807,6 +842,7 @@ export class BoardView {
     _renderImageNote(note) {
         if (!this._alive || this._notes.has(note.id))
             return;
+        this._confineGeometry(note,true);
         if (!note.asset_path)
             throw new Error('Image note has no local asset path');
         const paper = new St.BoxLayout({
@@ -838,55 +874,47 @@ export class BoardView {
     _press(event) {
         if (!this._service)
             return Clutter.EVENT_PROPAGATE;
-
-        if (event.get_button() === 1) {
-            const [x, y] = event.get_coords();
-            if (this._pinMenu) {
-                const {actor} = this._pinMenu;
-                const inside = x >= actor.x && y >= actor.y &&
-                    x <= actor.x + actor.width && y <= actor.y + actor.height;
-                if (inside) {
-                    this._doubleClick.reset();
-                    return Clutter.EVENT_PROPAGATE;
-                }
-                this._closePinMenu();
-            }
-            // The event source can differ from the root even for a blank
-            // background click on GNOME Classic. Decide from screen/world
-            // geometry instead; don't intercept clicks inside note editors.
-            const uiRects = [
-                {x: 0, y: 0, width: 420, height: 145},
-            ];
-            for (const actor of [
-                this._hud,this._createButton,this._imageButton,
-                this._settingsButton,this._settingsMenu,
-            ]) {
-                if (!actor)
-                    continue;
-                const [ax, ay] = actor.get_position();
-                const [width, height] = actor.get_size();
-                uiRects.push({x: ax, y: ay, width, height});
-            }
-            const notes = Array.from(this._notes.values(), item => item.note);
-            if (!isEmptyBoardPoint(this._view, {x, y}, notes, uiRects)) {
+        if (event.get_button()!==1) {
+            this._doubleClick.reset();
+            return Clutter.EVENT_PROPAGATE; // No middle-button pan.
+        }
+        const [x,y]=event.get_coords();
+        if (!validBoardPoint({x,y},global.stage.width,global.stage.height))
+            return Clutter.EVENT_PROPAGATE;
+        if (this._pinMenu) {
+            const {actor}=this._pinMenu;
+            const inside=x>=actor.x && y>=actor.y &&
+                x<=actor.x+actor.width && y<=actor.y+actor.height;
+            if (inside) {
                 this._doubleClick.reset();
                 return Clutter.EVENT_PROPAGATE;
             }
-            // GNOME Shell 50 exposes get_time()/get_coords(), not a
-            // click-count method. Treat two nearby presses as a gesture.
-            if (this._doubleClick.register(event.get_time(), x, y)) {
-                this._createNoteAtScreen(x, y);
-                return Clutter.EVENT_STOP;
-            }
+            this._closePinMenu();
+        }
+        const uiRects=[];
+        // The HUD is non-interactive, only Settings excludes gestures.
+        for (const actor of [this._settingsButton,this._settingsMenu]) {
+            if (!actor)
+                continue;
+            const [ax,ay]=actor.get_position();
+            const [width,height]=actor.get_size();
+            uiRects.push({x:ax,y:ay,width,height});
+        }
+        const notes=[...this._notes.values()].map(item=>item.note);
+        if (!isEmptyBoardPoint(this._view,{x,y},notes,uiRects)) {
+            this._doubleClick.reset();
             return Clutter.EVENT_PROPAGATE;
         }
-
-        this._doubleClick.reset();
-        if (event.get_button() !== 2 || !this._beginGrab())
-            return Clutter.EVENT_PROPAGATE;
-        const [x, y] = event.get_coords();
-        this._dragPoint = {x, y};
-        return Clutter.EVENT_STOP;
+        const mode=event.get_state() & Clutter.ModifierType.CONTROL_MASK
+            ? 'image' : 'text';
+        if (this._doubleClick.register(event.get_time(),x,y,mode)) {
+            if (mode==='image')
+                this._chooseImage({x,y});
+            else
+                this._createNoteAtScreen(x,y);
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _beginGrab() {
@@ -926,7 +954,7 @@ export class BoardView {
         if (kind === 'edit')
             return Clutter.EVENT_PROPAGATE;
         if (kind === 'drag')
-            return Clutter.EVENT_STOP; // Phase 4: move by pin only.
+            return this._startNoteDrag(event,note); // Hold to drag, no pan.
         if (!this._beginGrab())
             return Clutter.EVENT_PROPAGATE;
         this._dragPoint = {x, y};
@@ -972,9 +1000,7 @@ export class BoardView {
             const [x, y] = event.get_coords();
             if (this._dragPoint) {
                 // Recover if release occurred outside the desktop actor.
-                const button = this._dragNote || this._resizeSession
-                    ? Clutter.ModifierType.BUTTON1_MASK
-                    : Clutter.ModifierType.BUTTON2_MASK;
+                const button=Clutter.ModifierType.BUTTON1_MASK;
                 if (!(event.get_state() & button)) {
                     const changed = this._releaseAsAborted();
                     return changed ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
@@ -1053,16 +1079,10 @@ export class BoardView {
         const dx = x - this._dragPoint.x;
         const dy = y - this._dragPoint.y;
         if (this._dragNote) {
-            this._dragNote.x += dx / this._view.zoom;
-            this._dragNote.y += dy / this._view.zoom;
-            this._notes.get(this._dragNote.id)?.actor.set_position(
-                this._dragNote.x, this._dragNote.y);
+            this._dragNote.x+=dx/this._view.zoom;
+            this._dragNote.y+=dy/this._view.zoom;
             this._applyGeometry(this._dragNote);
             this._queueStrings();
-        } else {
-            this._view = panBy(this._view, dx, dy);
-            this._applyView();
-            this._scheduleView();
         }
         this._dragPoint = {x, y};
         return Clutter.EVENT_STOP;
@@ -1084,10 +1104,6 @@ export class BoardView {
             this._service?.moveNote(note.id, note.x, note.y).catch(() => this._saveError());
             return Clutter.EVENT_STOP;
         }
-        if (!this._dragNote && event.get_button() === 2) {
-            this._endDrag();
-            return Clutter.EVENT_STOP;
-        }
         return Clutter.EVENT_PROPAGATE;
     }
 
@@ -1104,6 +1120,7 @@ export class BoardView {
             return this._renderImageNote(note);
         if (!this._alive || this._notes.has(note.id))
             return;
+        this._confineGeometry(note,true);
 
         const paper = new St.BoxLayout({
             reactive: true,
@@ -1226,6 +1243,9 @@ export class BoardView {
         if (this._paintTimer)
             GLib.Source.remove(this._paintTimer);
         this._paintTimer=0;
+        if (this._resizeTimer)
+            GLib.Source.remove(this._resizeTimer);
+        this._resizeTimer=0;
         if (this._reconnectTimer)
             GLib.Source.remove(this._reconnectTimer);
         this._reconnectTimer=0;
@@ -1262,8 +1282,6 @@ export class BoardView {
         this._root = null;
         this._world = null;
         this._hud = null;
-        this._createButton = null;
-        this._imageButton = null;
         this._settingsButton = null;
         this._service = null;
         this._backgroundGroup = null;

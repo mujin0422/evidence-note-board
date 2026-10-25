@@ -8,7 +8,7 @@ settings=(root/"backend/src/settings.rs").read_text(encoding="utf-8")
 for snippet in (
     "singleScreenLayout(",
     "getSettings()", "_toggleSettingsMenu()", "this._preferences.show_strings",
-    "this._preferences.zoom_step", "_scheduleReconnect()",
+    "_scheduleReconnect()",
     "this._dirtyNotes.add(id)", "this._flushNote(id)", "this._dirtyView",
     "curveVisible(from,to,viewport)", "this._paintTimer", "this._reconnectTimer",
 ):
