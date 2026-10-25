@@ -1,62 +1,86 @@
-# Kiến trúc — Phase 1 GNOME Classic Wayland
+# Kiến trúc hệ thống Evidence Note Board
 
-Trạng thái: **đã thực hiện PoC ở mức source; chưa xác minh trên Fedora GNOME Classic 50.5 thật**.
+## 1. Kiến trúc theo từng phase
 
-## 1. Ràng buộc compositor
+**Phase 1 (PoC, chưa xác minh trên thiết bị):** GNOME Shell Extension nhúng `St.Widget` vào `Main.layoutManager._backgroundGroup`, nằm theo thiết kế dưới ứng dụng; sử dụng `canvasMath.js` để transform camera. Đây là **API private**, không cam kết tương thích lâu dài. GNOME Classic bổ sung panel/extension, cần test stacking, focus và đa màn hình.
 
-GNOME sử dụng Mutter trên Wayland. Một cửa sổ GTK/Qt thường không thể tự ý nằm dưới mọi ứng dụng hoặc thay ảnh nền chỉ bằng một giao thức window stacking. Không giả định hỗ trợ `wlr-layer-shell` (giao thức của compositor khác). GNOME Classic vẫn dùng GNOME Shell nhưng có cấu hình session và extension khác GNOME mặc định.
-
-Trong mã nguồn **GNOME Shell 50.4**, `js/ui/layout.js` tạo `Meta.BackgroundGroup` dưới `global.window_group` và quản lý các background actor theo monitor. Điều này hỗ trợ phương án PoC, nhưng `Main.layoutManager._backgroundGroup` là trường **private**. Không đồng nhất việc đọc mã 50.4 với xác minh nhị phân GNOME Shell **50.5** mà người dùng đang chạy.
-
-Tài liệu nền:
-- GNOME Shell layout 50.4: https://raw.githubusercontent.com/GNOME/gnome-shell/50.4/js/ui/layout.js
-- Extension anatomy: https://gjs.guide/extensions/overview/anatomy.html
-- Session modes: https://gjs.guide/extensions/topics/session-modes.html
-- GNOME Classic Fedora package: https://packages.fedoraproject.org/pkgs/gnome-shell-extensions/gnome-classic-session/
-
-## 2. So sánh kiến trúc
-
-| Phương án | Ưu điểm | Nhược điểm | Quyết định |
-|---|---|---|---|
-| GNOME Shell Extension (GJS, Clutter/St) + Rust/SQLite sau này | Có thể gắn actor ở layer desktop; không giả lập wallpaper window | Phụ thuộc private API, lỗi JS ảnh hưởng Shell | **PoC được chọn**, cần test thực tế |
-| GTK4/Qt application + extension phụ trợ để tích hợp desktop | Có GUI toolkit riêng và tách logic khỏi compositor | Phải phối hợp stacking/focus trên Wayland, phức tạp và không chắc tương đương wallpaper | Phương án dự phòng cần nghiên cứu |
-| GTK4/Qt window độc lập | Dễ phát triển và debug | Không đáp ứng yêu cầu desktop layer GNOME Wayland | Không chọn |
-
-## 3. Sơ đồ hệ thống
+**Phase 2 (implementation hiện tại, chờ nghiệm thu):** giữ extension trên GNOME Shell; thêm backend Rust user service + SQLite, giao tiếp D-Bus bất đồng bộ. Không gọi SQLite từ compositor, không khởi tạo web app.
 
 ```mermaid
-flowchart TD
-    Pointer[Chuột trên desktop] --> Extension[GNOME Shell Extension - Phase 1]
-    Extension --> Actor[Background actor - PoC]
-    Actor --> Camera[World/screen transform]
-    Extension -. "D-Bus dự kiến Phase 2" .-> Rust[Rust user service]
-    Rust -.-> SQLite[(SQLite / XDG data)]
-    Rust -.-> Assets[Local image assets]
+flowchart LR
+    User[Chuột và bàn phím] --> Actor[GNOME Extension GJS / St/Clutter]
+    Actor --> Camera[Camera + text card editor]
+    Actor <-->|Gio.DBusProxy Async / session bus| IPC[io.github.mujin0422.EvidenceNoteBoard]
+    IPC --> Daemon[Rust evidence-note-boardd / zbus]
+    Daemon --> DB[(rusqlite / SQLite WAL)]
+    DB --> XDG[$XDG_DATA_HOME/evidence-note-board/evidence.db]
 ```
 
-**Đã code:** Extension, actor, camera và xử lý sự kiện. **Chưa code:** Rust, D-Bus, SQLite runtime, assets.
+**Chưa code:** import image, pins, connections, migrations > v1, packaging RPM, Undo/Redo, nhiều board. Schema có tables chuẩn bị trước cho phase 3–4 nhưng chưa có logic sử dụng.
 
-## 4. Cấu trúc
+## 2. Phương án kỹ thuật
 
-- `extension/extension.js`: enable/disable, lỗi mount.
-- `extension/boardView.js`: actor, event handling, pointer grab, signal cleanup.
-- `extension/canvasMath.js`: logic tọa độ thuần JavaScript.
-- `extension/stylesheet.css`: charcoal, thẻ minh họa vintage.
-- `tests/`: test camera, schema SQL ở dạng thiết kế và kiểm tra package.
-- `scripts/`: cài thử và tạo ZIP.
-- `db/migrations/`: schema **chưa được sử dụng**, lưu lại như bản thiết kế Phase 2.
+| Phương án | Được | Không được |
+|---|---|---|
+| GNOME Shell Extension + Rust backend (đang triển khai) | Background actor + I/O ở tiến trình riêng, lưu local | API `_backgroundGroup` private, GNOME Classic chưa kiểm thử |
+| GTK/Qt app window được extension tích hợp vào desktop | Tách GUI khỏi Shell | Focus/stacking trên Wayland khó, nhiều thành phần |
+| App window GTK/Qt thuần | Dễ phát triển | Không bảo đảm dưới mọi cửa sổ trên GNOME Wayland |
 
-## 5. Quyết định kỹ thuật và rủi ro
+## 3. D-Bus API — Phase 2
 
-1. Thêm actor vào background group nhưng **không sửa chính Mutter, không monkey-patch GNOME Shell**.
-2. Nếu group không tồn tại, thất bại an toàn; không tạo cửa sổ thay thế.
-3. Khi monitor thay đổi, tự điều chỉnh kích thước và đưa actor lên trên các wallpaper actor mới; vẫn giữ dưới application windows nhờ hierarchy.
-4. Chỉ grab con trỏ trong lúc middle-drag; dismiss grab khi thả chuột hoặc disable.
-5. Không lưu dữ liệu người dùng, chưa khởi chạy backend, không cần root.
-6. GNOME Classic có extension panel/dock/desktop riêng: input propagation, Overview, fullscreen, đa màn hình là **đầu mục kiểm thử chưa xác minh**.
-7. `Meta.BackgroundGroup` và `_backgroundGroup` có thể đổi giữa phiên bản GNOME; không tự suy diễn tương thích với GNOME 51.
-8. Một phiên bản Fedora chỉ được gọi là hỗ trợ sau khi kiểm thử trực tiếp, không chỉ vì CI xanh.
+- Bus: `session`
+- Name/interface: `io.github.mujin0422.EvidenceNoteBoard`
+- Object: `/io/github/mujin0422/EvidenceNoteBoard`
+- `ListNotes() -> s` (JSON array)
+- `CreateNote(s title, s content, d x, d y) -> s` (JSON object)
+- `UpdateNote(s id, s title, s content)`
+- `MoveNote(s id, d x, d y)`
+- `DeleteNote(s id)`
+- `GetView() -> s` (JSON object)
+- `SaveView(d zoom, d panX, d panY)`
 
-## 6. Acceptance gate
+Giao thức JSON được giới hạn ở kết quả đọc để dễ mở rộng record; argument mutation vẫn là D-Bus typed values. D-Bus session bus được giới hạn theo người dùng, nhưng tiến trình cùng user có thể gọi các method; đây **không phải ranh giới bảo mật để lưu secret khỏi các app cùng user**.
 
-Cần ảnh/video hoặc báo cáo thực tế trên GNOME Classic 50.5 Wayland: board đúng layer, Firefox/Terminal ở phía trên, top bar/dock không che, zoom/pan, enable/disable, Overview, monitor change và không có lỗi GNOME Shell. Chi tiết tại [TESTING](TESTING.md). Chưa hoàn tất cho đến khi có bằng chứng này.
+```mermaid
+sequenceDiagram
+    participant E as GNOME Shell Extension
+    participant S as Rust D-Bus Service
+    participant D as SQLite
+    E->>S: CreateNote(title, content, x, y)
+    S->>S: Validate input + UUID
+    S->>D: INSERT with prepared parameters
+    D-->>S: COMMIT success
+    S-->>E: JSON note
+    E->>E: Render Clutter card
+    E->>S: UpdateNote(...), MoveNote(...) (debounced / drag end)
+    S->>D: UPDATE
+    E->>S: ListNotes + GetView (after enable)
+    D-->>S: Saved notes + camera
+    S-->>E: JSON snapshots
+```
+
+## 4. SQLite
+
+- Data: `$XDG_DATA_HOME/evidence-note-board/evidence.db`; mặc định `~/.local/share/evidence-note-board/evidence.db`.
+- Embedded `rusqlite` `bundled`, PRAGMA `foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout=3000`.
+- Migration `db/migrations/0001_init.sql` áp dụng trong transaction khi `user_version=0`, đánh dấu version 1. Reject version > 1; không hạ cấp database.
+- Bảng hoạt động: `boards`, `notes`, `board_view_state`. Schema dự phòng: `assets`, `pins`, `connections` (không thao tác).
+- UUID cấp bởi backend; chỉ xử lý `type=text`, board mặc định `default`.
+- Prepared SQL, giới hạn title 512 bytes, body 65,536 bytes, finite position và zoom 0.25–3.
+- Thay đổi text ghi sau debounce 500ms, drag chỉ ghi cuối lần kéo; camera sau debounce 550ms.
+- Không xóa `evidence.db` khi gỡ, backup lúc service đã dừng.
+
+## 5. Failure paths và độ tin cậy
+
+- Backend không chạy: extension vẫn mount background nhưng hiển thị `BACKEND OFFLINE`; không tạo note giả. Chạy `systemctl --user ...` và bật lại extension.
+- GJS không dùng D-Bus sync; mọi mutation async và serialized client-side.
+- Lỗi DB trả về D-Bus error (không log nội dung note); UI hiển thị lỗi lưu.
+- Enable/disable hủy actor, signal, pointer grab và timeout; các writes đang gửi có thể hoàn tất khi disable, cần thử trên máy thật.
+- Nếu GNOME private background group không tồn tại: fail closed, không tạo always-on-top overlay.
+- Backend chạy systemd user scope; chưa có D-Bus activation. Nếu backend restart sau khi extension bật, hiện cần **disable/re-enable extension** để kết nối lại.
+
+## 6. Những vấn đề chưa xác minh
+
+GNOME Classic 50.5 pointer/focus/input, `Clutter.Text` multiline editing, `Gio.DBusProxy` introspection trên session thật, systemd user service cài trên Fedora, crash recovery, clipboard/IME tiếng Việt, race khi logout lúc debounce, shell/GPU đa màn hình, benchmark. Không đưa các mục đó vào nhóm 'PASS' chỉ dựa trên source hoặc CI.
+
+Tài liệu API: https://gjs.guide/guides/gio/dbus.html · https://docs.rs/zbus/latest/zbus/ · https://docs.rs/rusqlite/latest/rusqlite/

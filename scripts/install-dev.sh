@@ -17,17 +17,17 @@ if [[ ! "$SHELL_VERSION" =~ GNOME[[:space:]]Shell[[:space:]]50(\.|$) ]]; then
 fi
 
 if [[ "${XDG_SESSION_TYPE:-}" != "wayland" ]]; then
-    echo "Lỗi: bản PoC cần phiên Wayland đang đăng nhập (XDG_SESSION_TYPE=wayland)." >&2
+    echo "Lỗi: cần phiên Wayland đang đăng nhập." >&2
     exit 1
 fi
 
 mkdir -p "$TARGET"
-for name in metadata.json extension.js boardView.js canvasMath.js stylesheet.css; do
+for name in metadata.json extension.js boardView.js canvasMath.js noteService.js stylesheet.css; do
     install -m 0644 "$ROOT/extension/$name" "$TARGET/$name"
 done
 
-echo "Đã chép extension tới: $TARGET"
-echo "Chưa tự bật extension để bảo vệ phiên làm việc."
-echo "Nếu extension chưa xuất hiện, đăng xuất và đăng nhập lại."
-echo "Sau đó chạy: gnome-extensions enable $UUID"
-echo "Phục hồi: gnome-extensions disable $UUID"
+echo "Đã chép GNOME extension tại $TARGET"
+echo "Cần chạy scripts/install-backend-dev.sh trước khi bật extension."
+echo "Đăng xuất/đăng nhập lại nếu GNOME chưa tìm thấy extension mới."
+echo "Bật: gnome-extensions enable $UUID"
+echo "Tắt: gnome-extensions disable $UUID"

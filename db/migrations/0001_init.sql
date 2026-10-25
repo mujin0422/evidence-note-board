@@ -1,6 +1,6 @@
--- Proposed Phase 2 schema. Not yet opened by a Rust backend.
--- Enable PRAGMA foreign_keys = ON for every connection.
--- Consider WAL once the backend is implemented.
+-- Migration v1: text note schema and future-ready pins/assets/connections.
+-- Applied in one transaction by backend/src/db.rs; user_version=1.
+-- SQLite is embedded and foreign_keys are enabled on every backend connection.
 CREATE TABLE IF NOT EXISTS boards (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

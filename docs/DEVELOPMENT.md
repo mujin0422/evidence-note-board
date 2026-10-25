@@ -1,58 +1,73 @@
-# DEVELOPMENT — Hướng dẫn phát triển
+# DEVELOPMENT — Quy trình code theo phase
 
-## Mục tiêu
-
-Phase 1 chỉ kiểm chứng khả năng vẽ board trên desktop GNOME Classic 50.5 Wayland và tương tác chuột. **Không** triển khai backend hoặc note thật.
-
-## Yêu cầu
-
-- Fedora GNOME Shell 50.x, ưu tiên GNOME Classic 50.5 + Wayland.
-- Node.js 20+ để kiểm thử phép biến đổi canvas.
-- Python 3 để kiểm tra package / migration SQL bản thiết kế.
-- `gnome-extensions` CLI để quản lý extension.
-
-## Git workflow
+## Branch workflow
 
 ```bash
 git fetch origin
 git switch dev
 git pull --ff-only origin dev
-git switch -c feat/<short-description>
+git switch -c feat/short-description
 ```
 
-Commit theo Conventional Commits, mở PR **vào `dev`**. Không merge tự động, không đẩy trực tiếp lên `dev` hoặc `main`. Với code GNOME Shell, review API và kiểm thử thủ công trước khi đánh dấu Ready.
+Mỗi phase một hoặc nhiều PR vào `dev`, commit Conventional Commits, **không** push trực tiếp `main`/`dev`, **không** tự merge. PR Phase 1 đã merge vào dev; Phase 2 phát triển từ dev. Cần ghi chính xác mức kiểm chứng từng phase trong PR.
 
-## Mô-đun
+## Cấu trúc source
 
-- `boardView.js`: chỉ chứa hoạt động compositor-facing của PoC.
-- `canvasMath.js`: toán học camera tách biệt, không import `gi://`, chạy Node.
-- `extension.js`: vòng đời extension tối giản.
-- `stylesheet.css`: visual appearance.
-- `metadata.json`: ghi duy nhất major 50; bản minor cần kiểm thử thực tế.
+```text
+backend/
+  Cargo.toml                  # Rust crates: zbus, rusqlite, serde, uuid
+  src/db.rs                   # SQLite migration, CRUD, view state, tests
+  src/main.rs                 # D-Bus session service, validation
+extension/
+  metadata.json              # GNOME Shell 50 major
+  extension.js               # enable/disable lifecycle
+  boardView.js               # camera, pointer interaction, note editor
+  noteService.js             # async D-Bus client; mutation queue
+  canvasMath.js              # pure JS camera math
+  stylesheet.css             # charcoal and paper cards
+db/migrations/0001_init.sql   # migration v1
+packaging/evidence-note-board.service
+scripts/
+  install-backend-dev.sh
+  install-dev.sh
+  build-extension.sh
+tests/
+  canvasMath.test.js
+  check_extension.py
+  check_migration.py
+docs/phases/
+  PHASE_01.md
+  PHASE_02.md
+```
 
-## Chạy kiểm tra
+## Local static/unit checks
 
 ```bash
-node --check extension/extension.js
+cargo test --manifest-path backend/Cargo.toml
+cargo fmt --manifest-path backend/Cargo.toml --check
 node --check extension/boardView.js
-node --check extension/canvasMath.js
+node --check extension/noteService.js
 node --test tests/canvasMath.test.js
 python3 tests/check_migration.py
-bash -n scripts/install-dev.sh scripts/build-extension.sh
+bash -n scripts/*.sh
 bash scripts/build-extension.sh
 python3 tests/check_extension.py
 ```
 
-Các phép kiểm trên chỉ tìm lỗi cú pháp, phép toán, schema/package. Chúng không tải được GNOME Shell, không thể kiểm tra input stacking/dock trong compositor. GitHub Actions cung cấp ZIP thử nghiệm.
+Khuyến nghị `cargo clippy --manifest-path backend/Cargo.toml --all-targets`. Không chạy GJS compositor API trong Node vì GI/Clutter không có trên Node.
 
-## Dev loop trên Fedora
+## Thử end-to-end
 
-1. Tạo branch từ `dev`, chạy các kiểm tra tĩnh.
-2. Dùng `bash scripts/install-dev.sh` (phải đang trong Wayland GNOME 50).
-3. Đăng xuất/đăng nhập nếu extension mới không được nhận.
-4. Dùng `gnome-extensions enable evidence-note-board@mujin0422.github.io`.
-5. Ghi nhận kết quả với checklist `docs/TESTING.md`.
-6. Trước khi sửa tiếp, disable extension; cập nhật tập tin và đăng nhập lại nếu cần.
-7. Nếu có lỗi compositor, dừng, disable, lưu lại log; không coi PoC đã pass.
+```bash
+bash scripts/install-backend-dev.sh
+bash scripts/install-dev.sh
+systemctl --user status evidence-note-board.service
+busctl --user introspect io.github.mujin0422.EvidenceNoteBoard /io/github/mujin0422/EvidenceNoteBoard
+gnome-extensions enable evidence-note-board@mujin0422.github.io
+```
 
-Không chạy extension/GUI bằng sudo. Không sửa `global.window_group` theo cách chuyển thứ tự cửa sổ ứng dụng.
+Thử theo docs/phases/PHASE_02.md. Để kiểm tra persistence: tạo note, sửa, kéo, rồi disable/re-enable extension, logout/login và kiểm tra text/camera còn nguyên. Tách riêng kết quả `cargo test`, `GitHub CI` và nghiệm thu trực tiếp trên Fedora.
+
+## Quy tắc triển khai
+
+Không truy cập SQLite từ GNOME Shell main thread. Không ghi database mỗi pixel kéo chuột. Không giả lập giao diện với persistence giả. Không ghi nội dung note vào logs. Không dùng sudo chạy binary hoặc extension. Không hứa hỗ trợ GNOME Classic nếu chưa test compositor thật.

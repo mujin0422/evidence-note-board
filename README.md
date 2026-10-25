@@ -1,71 +1,69 @@
 # Evidence Note Board
 
-**Dự án native Linux dành cho Fedora GNOME Classic 50.5 trên Wayland.**
+Ứng dụng Linux desktop native theo phong cách bảng điều tra, phát triển cho **Fedora GNOME Classic 50.5 / Wayland**. Dữ liệu lưu **cục bộ**; không có tài khoản, cloud hay Electron.
 
-Ứng dụng hướng tới một bảng điều tra (evidence board) màu đen than ngay tại desktop, sau các cửa sổ thông thường. Giai đoạn hiện tại chỉ là **Phase 1 — Proof of Concept**, chưa phải phiên bản hoàn chỉnh.
+> **Trạng thái:** Phase 2 đang triển khai trên nhánh tính năng, chưa được nghiệm thu trên GNOME thực tế. Không xem CI xanh là xác nhận giao diện hoạt động.
 
-## Có gì trong Phase 1?
+## Tiến độ theo phase
 
-- GNOME Shell Extension tạo actor màu `#111111` trong background group của Shell.
-- Hai thẻ mẫu để quan sát zoom/pan (không phải ghi chú thật).
-- `Ctrl + Mouse Wheel`: zoom tại vị trí con trỏ (25%–300%).
-- `Middle Mouse Drag`: di chuyển camera trên bảng.
-- Bật/tắt bằng GNOME Extensions; các actor và pointer grab được giải phóng khi disable.
-- Kiểm thử toán học canvas, kiểm tra tĩnh và đóng gói ZIP qua GitHub Actions.
+| Phase | Phạm vi | Thực trạng |
+|---|---|---|
+| [01 — Desktop PoC](docs/phases/PHASE_01.md) | Board charcoal, Ctrl+Wheel zoom, middle-drag pan | Có source + CI; **chưa xác minh** GNOME Classic thực tế |
+| [02 — Text notes & SQLite](docs/phases/PHASE_02.md) | Rust user service, D-Bus async, text CRUD, kéo note, khôi phục camera và note | **Đã viết source**, chờ build/CI + nghiệm thu Fedora |
+| 03 | Image notes, nhập ảnh, giấy vintage | Chưa bắt đầu |
+| 04 | Pin & red strings | Chưa bắt đầu |
+| 05 | Robustness, multi-monitor, settings | Chưa bắt đầu |
+| 06 | RPM, releases | Chưa bắt đầu |
 
-**Giới hạn:** Mã đang sử dụng `Main.layoutManager._backgroundGroup`, một API nội bộ của GNOME Shell. Chưa xác nhận input, stacking, dock hoặc GNOME Classic 50.5 trên máy Fedora thật. Không có backend, SQLite đang chạy, note thật, ảnh hay dây đỏ.
+## Chức năng của source Phase 2
 
-## Cài đặt thử
+- Double-click vào **khoảng trống board**: tạo text note trong SQLite.
+- Sửa title (một dòng) và body (nhiều dòng, Unicode); tự lưu theo debounce.
+- Kéo bằng thanh tiêu đề; di chuyển và lưu vị trí note.
+- Xóa note: nhấn `×` rồi xác nhận `Xóa?`.
+- Zoom bằng `Ctrl + Wheel`, pan bằng `Middle Mouse Drag`; lưu camera.
+- Backend dùng Rust + rusqlite và user session D-Bus; `evidence.db` ở `$XDG_DATA_HOME/evidence-note-board/` (mặc định `~/.local/share/`).
+- Khôi phục nội dung sau khi tắt/mở lại extension nếu backend đang chạy.
+
+Không có ảnh, dây đỏ, Undo, resize, multiple boards hay RPM trong Phase 2. Phase 2 vẫn phụ thuộc việc Phase 1 đặt actor đúng desktop layer, vốn chưa được kiểm chứng trên GNOME Classic 50.5 thực tế.
+
+## Thử từ branch / PR
 
 ```bash
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
-git switch dev
+git fetch origin
+git switch --track origin/feat/phase2-text-notes-persistence
+bash scripts/install-backend-dev.sh
 bash scripts/install-dev.sh
 ```
 
-Khi kiểm tra một PR chưa merge, chuyển sang branch của PR thay vì `dev` trước khi cài đặt. Nếu GNOME chưa nhận extension mới, đăng xuất/đăng nhập; sau đó:
+Cần Fedora GNOME Shell 50.x / Wayland, Rust/Cargo, systemd user và GNOME Extensions CLI. Nếu extension chưa được GNOME phát hiện hãy đăng xuất/đăng nhập lại, sau đó:
 
 ```bash
 gnome-extensions enable evidence-note-board@mujin0422.github.io
-gnome-extensions info evidence-note-board@mujin0422.github.io
+systemctl --user status evidence-note-board.service
 ```
 
-Khôi phục desktop:
+**Không chạy GUI hoặc backend bằng sudo.** Chi tiết an toàn, cách gỡ và sao lưu: [INSTALLATION](docs/INSTALLATION.md).
+
+## Kiểm thử
 
 ```bash
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-```
-
-Hướng dẫn chi tiết: [INSTALLATION](docs/INSTALLATION.md), [TESTING](docs/TESTING.md).
-
-## Kiểm tra mã nguồn
-
-```bash
-node --check extension/extension.js
-node --check extension/boardView.js
+cargo test --manifest-path backend/Cargo.toml
 node --test tests/canvasMath.test.js
 python3 tests/check_migration.py
 bash scripts/build-extension.sh
 python3 tests/check_extension.py
 ```
 
-Các lệnh này **không** xác minh giao diện GNOME Wayland.
+Xem [TESTING](docs/TESTING.md) và [Phase 2 test checklist](docs/phases/PHASE_02.md).
 
 ## Tài liệu
 
-- [ARCHITECTURE](docs/ARCHITECTURE.md): so sánh phương án, rủi ro API nội bộ, thiết kế tương lai.
-- [DEVELOPMENT](docs/DEVELOPMENT.md): cấu trúc code, cách phát triển và Git workflow.
-- [TESTING](docs/TESTING.md): tiêu chí nghiệm thu GNOME Classic 50.5.
-- [INSTALLATION](docs/INSTALLATION.md): cài và gỡ PoC.
-- [PHASE1_TEST_PLAN](docs/PHASE1_TEST_PLAN.md): checklist ngắn.
-
-## Lộ trình
-
-1. **Phase 1:** chứng minh desktop layer + tương tác, yêu cầu test thật.
-2. **Phase 2:** Rust service, SQLite, tạo/sửa/xóa và khôi phục text note.
-3. **Phase 3:** image notes và giao diện giấy cũ.
-4. **Phase 4:** ghim và dây đỏ liên kết.
-5. **Phase 5–6:** ổn định, RPM và release.
-
-Không đưa Electron, cửa sổ always-on-top hay cloud vào kiến trúc desktop board.
+- [ARCHITECTURE](docs/ARCHITECTURE.md) — sơ đồ, D-Bus contract, persistence, rủi ro.
+- [DEVELOPMENT](docs/DEVELOPMENT.md) — module, Git workflow từ `dev`, kiểm tra.
+- [INSTALLATION](docs/INSTALLATION.md) — cài backend + extension, vận hành.
+- [TESTING](docs/TESTING.md) — phân biệt automatic và on-device.
+- [PHASE_01](docs/phases/PHASE_01.md) — kết quả/giới hạn của phase trước.
+- [PHASE_02](docs/phases/PHASE_02.md) — deliverables, acceptance, danh sách chưa xác minh.

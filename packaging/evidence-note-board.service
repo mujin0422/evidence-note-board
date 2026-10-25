@@ -1,0 +1,14 @@
+[Unit]
+Description=Evidence Note Board user-local SQLite/D-Bus backend
+After=dbus.socket
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/evidence-note-boardd
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
