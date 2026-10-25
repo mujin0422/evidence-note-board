@@ -1,43 +1,43 @@
 .evidence-board-root {
     background-color: #111111;
 }
-
 .evidence-board-hud {
     color: #b6aea2;
-    background-color: rgba(0, 0, 0, 0.72);
+    background-color: rgba(0, 0, 0, 0.75);
     padding: 9px 13px;
     border-radius: 4px;
     font-size: 12px;
 }
-
 .evidence-paper {
-    padding: 16px 20px;
+    background-color: #e9d898;
+    padding: 12px 16px;
     border-radius: 3px;
     box-shadow: 0 7px 16px rgba(0, 0, 0, 0.55);
-    spacing: 8px;
+    spacing: 7px;
 }
-
 .evidence-paper-aged {
     background-color: #e9d898;
 }
-
-.evidence-paper-ivory {
-    background-color: #f1e9d2;
+.evidence-note-header {
+    spacing: 10px;
 }
-
-.evidence-pin {
+.evidence-note-handle {
     color: #a32626;
-    font-size: 23px;
-    text-align: center;
-}
-
-.evidence-paper-title {
-    color: #443628;
-    font-size: 17px;
+    font-size: 12px;
     font-weight: bold;
 }
-
-.evidence-paper-body {
-    color: #514837;
-    font-size: 14px;
+.evidence-delete {
+    color: #6b2923;
+    background-color: transparent;
+    border: none;
+    font-weight: bold;
+    padding: 0 6px;
+}
+.evidence-edit-title {
+    color: #443628;
+    background-color: rgba(255, 255, 255, 0.22);
+    border: 0;
+    box-shadow: none;
+    font-size: 16px;
+    font-weight: bold;
 }

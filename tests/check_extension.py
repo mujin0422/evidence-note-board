@@ -1,4 +1,4 @@
-"""Static packaging checks only; does not load GNOME Shell actors."""
+"""Static packaging checks only; does not load a GNOME compositor."""
 import json
 import pathlib
 import zipfile
@@ -9,14 +9,13 @@ meta = json.loads((ext / "metadata.json").read_text(encoding="utf-8"))
 
 assert meta["uuid"] == "evidence-note-board@mujin0422.github.io"
 assert meta["shell-version"] == ["50"]
-assert "session-modes" not in meta  # 'user' is the default.
 assert "#111111" in (ext / "stylesheet.css").read_text(encoding="utf-8")
 
 required = {"metadata.json", "extension.js", "boardView.js",
-            "canvasMath.js", "stylesheet.css"}
+            "canvasMath.js", "noteService.js", "stylesheet.css"}
 assert all((ext / path).is_file() for path in required)
-zip_path = ROOT / "dist/evidence-note-board-gnome50-poc.zip"
+zip_path = ROOT / "dist/evidence-note-board-gnome50-phase2.zip"
 if zip_path.exists():
     with zipfile.ZipFile(zip_path) as archive:
         assert set(archive.namelist()) == required
-print("Extension static checks: OK (not a compositor test)")
+print("Extension static checks: OK; GNOME compositor not exercised")

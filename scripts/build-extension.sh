@@ -11,10 +11,10 @@ import sys
 import zipfile
 
 root = pathlib.Path(sys.argv[1])
-output = pathlib.Path(sys.argv[2]) / "evidence-note-board-gnome50-poc.zip"
+output = pathlib.Path(sys.argv[2]) / "evidence-note-board-gnome50-phase2.zip"
 source = root / "extension"
 files = ("metadata.json", "extension.js", "boardView.js",
-         "canvasMath.js", "stylesheet.css")
+         "canvasMath.js", "noteService.js", "stylesheet.css")
 with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
     for name in files:
         archive.write(source / name, arcname=name)
