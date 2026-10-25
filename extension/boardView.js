@@ -259,6 +259,10 @@ export class BoardView {
     }
 
     _savePreferences(next) {
+        if (!this._service) {
+            this._setStatus('BACKEND OFFLINE · chưa thể lưu SETTINGS');
+            return;
+        }
         const previous=this._preferences;
         this._preferences=next;
         this._applyPreferences();
@@ -360,7 +364,10 @@ export class BoardView {
     }
 
     _scheduleView() {
-        if (!this._service || !this._alive)
+        if (!this._alive)
+            return;
+        this._dirtyView=true;
+        if (!this._service)
             return;
         if (this._viewTimer)
             GLib.Source.remove(this._viewTimer);
@@ -375,7 +382,14 @@ export class BoardView {
         if (!this._service)
             return;
         const {zoom, panX, panY} = this._view;
-        this._service.saveView(zoom, panX, panY).catch(() => this._saveError());
+        this._service.saveView(zoom, panX, panY).then(()=>{
+            if (this._alive && this._view.zoom===zoom &&
+                this._view.panX===panX && this._view.panY===panY)
+                this._dirtyView=false;
+        }).catch(()=>{
+            this._dirtyView=true;
+            this._saveError();
+        });
     }
 
     _saveError() {
@@ -1168,7 +1182,10 @@ export class BoardView {
     }
 
     _scheduleNote(id) {
-        if (!this._service || !this._alive)
+        if (!this._alive)
+            return;
+        this._dirtyNotes.add(id);
+        if (!this._service)
             return;
         this._cancelNoteTimer(id);
         const source = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
@@ -1192,7 +1209,13 @@ export class BoardView {
             .catch(() => this._saveError());
         // Leave the existing DB schema and D-Bus signature intact while
         // using an empty legacy title for body-only notes.
-        this._service.updateNote(id, '', content).catch(() => this._saveError());
+        this._service.updateNote(id, '', content).then(()=>{
+            if (this._alive && item.body?.get_text()===content)
+                this._dirtyNotes.delete(id);
+        }).catch(()=>{
+            this._dirtyNotes.add(id);
+            this._saveError();
+        });
     }
 
     _cancelNoteTimer(id) {
