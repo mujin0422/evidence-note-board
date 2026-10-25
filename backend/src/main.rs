@@ -1,3 +1,4 @@
+mod assets;
 mod db;
 
 use std::{error::Error, future::pending, path::PathBuf, sync::Mutex};
@@ -13,12 +14,12 @@ struct NoteApi {
 impl NoteApi {
     fn with_db<T>(
         &self,
-        f: impl FnOnce(&db::Storage) -> rusqlite::Result<T>,
+        f: impl FnOnce(&mut db::Storage) -> rusqlite::Result<T>,
     ) -> zbus::fdo::Result<T> {
-        let db = self.storage.lock().map_err(|_| {
+        let mut db = self.storage.lock().map_err(|_| {
             zbus::fdo::Error::Failed("Database unavailable".into())
         })?;
-        f(&db).map_err(|_| zbus::fdo::Error::Failed("Storage operation failed".into()))
+        f(&mut db).map_err(|_| zbus::fdo::Error::Failed("Storage operation failed".into()))
     }
 }
 
@@ -56,6 +57,16 @@ impl NoteApi {
         validate_text(title, content)?;
         validate_position(x, y)?;
         let note = self.with_db(|db| db.create_note(title, content, x, y))?;
+        serde_json::to_string(&note)
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn import_image(&self, path: &str, x: f64, y: f64) -> zbus::fdo::Result<String> {
+        validate_position(x, y)?;
+        if path.len() > 4096 || !PathBuf::from(path).is_absolute() {
+            return Err(zbus::fdo::Error::InvalidArgs("Choose an absolute image path".into()));
+        }
+        let note = self.with_db(|db| db.import_image(std::path::Path::new(path), x, y))?;
         serde_json::to_string(&note)
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
