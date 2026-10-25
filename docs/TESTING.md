@@ -75,3 +75,14 @@ Tại Fedora GNOME Classic 50.5, kiểm tra Enter tạo ba dòng độc lập,
 focus không làm đổi màu giấy, và double-click vùng trống ở zoom 25%/100%.
 Xác minh D-Bus ListNotes lưu \u005c\u005cn/newline thực tế sau khi reload;
 xem [PHASE_02](phases/PHASE_02.md).
+
+## P2.4 — Regression body-only editor
+
+- `node --test tests/noteContent.test.js`: không mất text/title lịch sử,
+  giữ dấu xuống dòng và Unicode.
+- `python3 tests/check_note_editor.py`: không còn title St.Entry,
+  Clutter.Text có multiline/focus, lưu title rỗng qua API cũ.
+- Fedora GNOME Classic 50.5 thực tế: tạo từ nút và double-click, focus
+  vào giấy, Enter tạo ba dòng, không có viền đỏ, logout/login giữ nguyên;
+  note cũ với title đã nhập vẫn hiển thị và lưu lại.
+- Rust backend và SQLite schema không đổi, không xóa hoặc reset dữ liệu.

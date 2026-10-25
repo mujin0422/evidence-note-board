@@ -126,3 +126,40 @@ bỏ border, border-image và box-shadow. Dữ liệu vẫn qua API
 Bài test Node xác minh phép hit-test/toạ độ; Python kiểm tra các thuộc tính
 editor. **Chưa xác nhận trên GNOME compositor thật cho đến khi người dùng
 chạy lại và cung cấp kết quả.**
+
+## P2.4 — Chuyển sang note chỉ có một nội dung multiline
+
+**Phản hồi thực tế từ Fedora:** người dùng đã xác nhận tạo note bằng nút,
+double-click và kéo note hoạt động. Vùng title (St.Entry) nhận văn bản nhưng
+chỉ cho phép một dòng; người dùng muốn **bỏ title hoàn toàn**, nhập vào
+toàn bộ phần giấy không viền và xuống dòng bằng Enter.
+
+**Triển khai:**
+
+- Gỡ `St.Entry` khỏi note. Thay bằng một `Clutter.Text` duy nhất dưới
+  thanh ghim/kéo, cho vùng nhập chiếm phần lớn giấy. Text actor là
+  `editable`, `reactive`, `single_line_mode=false`,
+  `activatable=false`, `line_wrap=true` và được focus khi click.
+- Khi tạo note, dùng `CreateNote('', '', x, y)`; sau khi thêm actor
+  vào canvas, chuyển keyboard focus tới editor. Nhấn Enter được kỳ vọng
+  chèn newline, còn `notify::text` tiếp tục debounce auto-save.
+- SQL schema, UUID và D-Bus signature **không thay đổi**. UpdateNote
+  luôn gửi title rỗng. Dữ liệu title cũ (nếu không phải tiêu đề mặc định)
+  được thêm trước nội dung cũ với ký tự xuống dòng và lưu lại sau
+  debounce; tiêu đề tự sinh `Ghi chú mới` không hiển thị.
+- Gỡ toàn bộ CSS title; editor `Clutter.Text` không có border/background
+  riêng và nằm trực tiếp trên giấy vàng.
+
+**Nghiệm thu cần kiểm tra trên Fedora GNOME Classic 50.5:**
+
+- [ ] Tạo note từ nút hoặc double-click, con trỏ sẵn sàng nhập trên giấy.
+- [ ] Không còn ô title hoặc khung đỏ khi focus.
+- [ ] Click vào giữa phần giấy, nhập nhiều dòng tiếng Việt bằng Enter.
+- [ ] Text xuống dòng được giữ sau ít nhất 1s và disable/re-enable, logout/login.
+- [ ] Note có title tự nhập ở bản cũ không mất chữ; title mặc định được bỏ.
+- [ ] Double-click, kéo note, pan/zoom và delete vẫn hoạt động.
+- [ ] Backend ListNotes trả về `title=""` sau lần đồng bộ cũ;
+  `content` chứa nội dung nhập mới/legacy.
+
+**Trạng thái:** code + unit/static tests đã thêm vào branch P2.4.
+Chưa coi là nghiệm thu GNOME UI cho tới khi có kết quả trực tiếp.
