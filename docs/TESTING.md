@@ -104,3 +104,12 @@ note cũ Phase 2 không thay đổi.
 nhân bản assets, các điều khiển resize/rotate/duplicate và đo Pango.
 `python3 -m py_compile extension/image-drop-target.py` kiểm tra cú pháp.
 Chỉ nghiệm thu giao diện kéo-thả trên Fedora thật với Nautilus.
+
+## Phase 3 mới — kiểm tra loại bỏ các nút và giữ tỉ lệ ảnh
+
+Bản sửa UI thay thế hướng dẫn Phase 3 thử nghiệm trước đây về `⇩ THẢ ẢNH`
+và `⧉`. Sử dụng `node --test tests/geometry.test.js` để xác minh
+nhận diện mép/góc và ratio ảnh; kiểm tra tĩnh
+`python3 tests/check_phase3_interactions.py` để chắc chắn nút/contract
+không quay lại. Theo checklist [PHASE_03](phases/PHASE_03.md), cần
+nghiệm thu GNOME Shell thật sau khi cập nhật extension.

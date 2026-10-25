@@ -13,7 +13,7 @@ assert "#111111" in (ext / "stylesheet.css").read_text(encoding="utf-8")
 
 required = {"metadata.json", "extension.js", "boardView.js",
             "canvasMath.js", "noteService.js", "doubleClickTracker.js",
-            "noteHitTest.js", "noteContent.js", "geometry.js", "stylesheet.css", "image-drop-target.py"}
+            "noteHitTest.js", "noteContent.js", "geometry.js", "stylesheet.css"}
 assert all((ext / path).is_file() for path in required)
 zip_path = ROOT / "dist/evidence-note-board-gnome50-phase2.zip"
 if zip_path.exists():

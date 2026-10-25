@@ -1,5 +1,18 @@
 # Evidence Note Board
 
+## Phase 3 UI tối giản (mới)
+
+Ảnh nhập qua `+ ẢNH` giữ nguyên tỉ lệ ngang/dọc; không còn thả ảnh
+từ file manager hoặc nhân bản. Tương tác trực tiếp trên giấy: kéo
+**mép trên/trái/dưới** để di chuyển, **mép phải** để thay đổi chiều
+rộng note hoặc resize ảnh, **góc dưới phải của ảnh** để resize và
+**góc trên trái** để xoay theo chuột. Không hiện nút xoay/resize/kéo.
+Nút xóa `×` vẫn còn. SQLite cũ được giữ lại.
+
+Bản thử nghiệm ở `fix/phase3-border-gestures-image-aspect`.
+Chạy `bash scripts/setup-dev.sh` và đăng xuất/đăng nhập GNOME
+Classic Wayland một lần để nạp lại extension.
+
 ## Cài một lần, tự chạy khi đăng nhập
 
 ```bash
