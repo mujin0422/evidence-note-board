@@ -1,7 +1,7 @@
 // Pure geometry utilities for image resize, paper width, and rotation.
 // All dimensions are in board/world coordinates, independent of zoom.
 export const MIN_TEXT_WIDTH = 200;
-export const MIN_IMAGE_WIDTH = 180;
+export const MIN_IMAGE_WIDTH = 220;
 export const MAX_NOTE_WIDTH = 1200;
 export const MIN_IMAGE_HEIGHT = 110;
 export const MAX_NOTE_HEIGHT = 6000;

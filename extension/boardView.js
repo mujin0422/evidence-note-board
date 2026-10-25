@@ -475,7 +475,10 @@ export class BoardView {
         if (!item?.body || !this._alive)
             return;
         // The Pango layout reflects wrapped lines at the allocated body width.
-        const [, pixels] = item.body.get_layout().get_pixel_size();
+        const layout = item.body.get_layout();
+        if (!layout)
+            return;
+        const [, pixels] = layout.get_pixel_size();
         const required = requiredPaperHeight(pixels);
         if (note.height !== required) {
             note.height = required;
@@ -498,7 +501,7 @@ export class BoardView {
         paper.set_position(note.x, note.y);
         const header = new St.BoxLayout({reactive: true, style_class: 'evidence-photo-header'});
         const handle = new St.Label({
-            text: '●  ẢNH ĐIỀU TRA',
+            text: '● ẢNH',
             reactive: true,
             style_class: 'evidence-note-handle',
         });
@@ -770,7 +773,13 @@ export class BoardView {
         });
         this._notes.set(note.id, {note, actor: paper, body});
         this._world.add_child(paper);
-        this._syncTextHeight(note);
+        // Measure after allocation; Pango may not know the final width
+        // immediately when an actor is first placed on the board.
+        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            if (this._alive && this._notes.has(note.id))
+                this._syncTextHeight(note);
+            return GLib.SOURCE_REMOVE;
+        });
 
         if (focus) {
             global.stage.set_key_focus(body);

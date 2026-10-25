@@ -156,8 +156,11 @@ impl Storage {
         let factor = (320.0 / f64::from(data.width))
             .min(240.0 / f64::from(data.height))
             .min(1.0);
-        let visual_width = (f64::from(data.width) * factor).max(60.0) + 24.0;
-        let visual_height = (f64::from(data.height) * factor).max(50.0) + 48.0;
+        let visual_width = ((f64::from(data.width) * factor).max(60.0) + 24.0)
+            .max(220.0);
+        let visual_height = ((visual_width - 24.0) *
+            f64::from(data.height) / f64::from(data.width)) + 48.0;
+        visual_height = visual_height.clamp(110.0, 6000.0);
         let tx_result: Result<()> = (|| {
             let tx = self.conn.transaction()?;
             tx.execute(
