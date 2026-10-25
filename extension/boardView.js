@@ -6,7 +6,8 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {panBy, screenToWorld, zoomAt} from './canvasMath.js';
+import {screenToWorld} from './canvasMath.js';
+import {confineNote, maxZoomThatFits, validBoardPoint} from './boardBounds.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
@@ -25,8 +26,6 @@ export class BoardView {
         this._root = null;
         this._world = null;
         this._hud = null;
-        this._createButton = null;
-        this._imageButton = null;
         this._imagePicker = null;
         this._settingsButton = null;
         this._settingsMenu = null;
@@ -103,30 +102,7 @@ export class BoardView {
         this._hud.set_position(22, 55);
         this._root.add_child(this._hud);
 
-        // Visible fallback while desktop double-click behavior is validated.
-        this._createButton = new St.Button({
-            label: '+ GHI CHÚ',
-            reactive: true,
-            can_focus: true,
-            style_class: 'evidence-create-button',
-        });
-        this._createButton.set_position(22, 98);
-        this._createButton.connect('clicked', () => {
-            const {x,y}=singleScreenLayout(global.stage.width,global.stage.height).center;
-            if (Number.isFinite(x) && Number.isFinite(y))
-                this._createNoteAtScreen(x, y);
-        });
-        this._root.add_child(this._createButton);
-
-        this._imageButton = new St.Button({
-            label: '+ ẢNH',
-            reactive: true,
-            can_focus: true,
-            style_class: 'evidence-create-button evidence-image-button',
-        });
-        this._imageButton.set_position(150, 98);
-        this._imageButton.connect('clicked', () => this._chooseImage());
-        this._root.add_child(this._imageButton);
+        // Double-click empty board for text; Ctrl+double-click for image.
         this._settingsButton = new St.Button({
             label: '⚙', reactive: true, can_focus: true,
             style_class: 'evidence-create-button evidence-settings-button',
@@ -205,11 +181,16 @@ export class BoardView {
         this._applyPreferences();
         this._connections = new Map(connections.map(c => [c.id, c]));
         this._queueStrings();
-        if (!this._dirtyView && Number.isFinite(view.zoom) && view.zoom >= 0.25 && view.zoom <= 3 &&
-            Number.isFinite(view.pan_x) && Number.isFinite(view.pan_y)) {
-            this._view = {zoom: view.zoom, panX: view.pan_x, panY: view.pan_y};
-        }
+        // Retire pan offsets saved by older releases.
+        const requestedZoom=!this._dirtyView && Number.isFinite(view.zoom)
+            ? Math.max(0.25,Math.min(3,view.zoom)) : this._view.zoom;
+        const maxZoom=maxZoomThatFits(notes.map(n=>
+            confineNote(n,global.stage.width,global.stage.height,1)),
+            global.stage.width,global.stage.height);
+        this._view={zoom:Math.min(requestedZoom,maxZoom),panX:0,panY:0};
         this._applyView();
+        if (view.pan_x!==0 || view.pan_y!==0 || view.zoom!==this._view.zoom)
+            this._scheduleView();
         let restored = 0;
         let failed = 0;
         for (const note of notes) {
@@ -228,7 +209,7 @@ export class BoardView {
         if (failed)
             this._setStatus(`LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`);
         else
-            this._setStatus(`P2.4 · SẴN SÀNG · ${restored} ghi chú · double-click hoặc + GHI CHÚ`);
+            this._setStatus(`SẴN SÀNG · ${restored} ghi chú · double-click: note · Ctrl+double-click: ảnh`);
     }
 
     _scheduleReconnect() {
@@ -300,18 +281,15 @@ export class BoardView {
         action(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
                 show_strings:!this._preferences.show_strings}));
-        action(`Zoom: ${this._preferences.zoom_step>1.15?'Nhanh':'Vừa'}`,
-            ()=>this._savePreferences({...this._preferences,
-                zoom_step:this._preferences.zoom_step>1.15?1.1:1.25}));
         action('Zoom 100%',()=>{
-            const point=singleScreenLayout(global.stage.width,global.stage.height).center;
-            this._view=zoomAt(this._view,point,1);
+            this._view={zoom:1,panX:0,panY:0};
+            this._confineAllNotes(true);
             this._applyView();
             this._scheduleView();
             this._closeSettingsMenu();
         });
         action('Đóng',()=>this._closeSettingsMenu());
-        menu.set_size(212,240);
+        menu.set_size(212,198);
         this._root.add_child(menu);
         this._settingsMenu=menu;
         const [x,y]=this._settingsButton.get_position();
@@ -334,8 +312,6 @@ export class BoardView {
         // Single-screen mode: toolbar remains at fixed stage coordinates.
         const c=singleScreenLayout(global.stage.width,global.stage.height);
         this._hud?.set_position(c.hud.x,c.hud.y);
-        this._createButton?.set_position(c.text.x,c.text.y);
-        this._imageButton?.set_position(c.image.x,c.image.y);
         this._settingsButton?.set_position(c.settings.x,c.settings.y);
         this._closeSettingsMenu();
         if (this._stringsLayer) {
@@ -349,9 +325,9 @@ export class BoardView {
         if (!this._world)
             return;
         this._world.set_scale(this._view.zoom, this._view.zoom);
-        this._world.set_position(this._view.panX, this._view.panY);
+        this._world.set_position(0,0);
         if (this._service)
-            this._setStatus('Ctrl+Wheel: zoom · chuột giữa: pan');
+            this._setStatus('Ctrl+Wheel: zoom · giữ/kéo pin hoặc mép giấy');
         this._positionPinMenu();
         this._queueStrings();
     }
@@ -442,7 +418,7 @@ export class BoardView {
             });
     }
 
-    async _chooseImage() {
+    async _chooseImage(screenPoint=null) {
         if (!this._service || !this._alive) {
             this._setStatus('BACKEND OFFLINE · không thể nhập ảnh');
             return;
@@ -479,9 +455,9 @@ export class BoardView {
             const selected = stdout.trim();
             if (!selected)
                 return;
-            const at = screenToWorld(this._view, {
-                ...singleScreenLayout(global.stage.width,global.stage.height).center,
-            });
+            const point=screenPoint ??
+                singleScreenLayout(global.stage.width,global.stage.height).center;
+            const at=screenToWorld(this._view,point);
             this._setStatus('Đang nhập ảnh vào bộ nhớ cục bộ…');
             const note = await this._service.importImage(selected, at.x, at.y);
             if (!this._alive)
@@ -1262,8 +1238,6 @@ export class BoardView {
         this._root = null;
         this._world = null;
         this._hud = null;
-        this._createButton = null;
-        this._imageButton = null;
         this._settingsButton = null;
         this._service = null;
         this._backgroundGroup = null;
