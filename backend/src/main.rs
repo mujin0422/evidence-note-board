@@ -1,5 +1,6 @@
 mod assets;
 mod db;
+mod settings;
 
 use std::{error::Error, future::pending, path::PathBuf, sync::Mutex};
 use zbus::{connection, interface};
@@ -9,6 +10,7 @@ const OBJECT: &str = "/io/github/mujin0422/EvidenceNoteBoard";
 
 struct NoteApi {
     storage: Mutex<db::Storage>,
+    preferences: Mutex<settings::SettingsStore>,
 }
 
 impl NoteApi {
@@ -138,6 +140,22 @@ impl NoteApi {
         Ok(())
     }
 
+    fn get_settings(&self) -> zbus::fdo::Result<String> {
+        let settings = self.preferences.lock()
+            .map_err(|_| zbus::fdo::Error::Failed("Settings unavailable".into()))?;
+        serde_json::to_string(&settings.get())
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn save_settings(&self, show_hud: bool, show_strings: bool, zoom_step: f64)
+        -> zbus::fdo::Result<()> {
+        let next = settings::Settings {show_hud, show_strings, zoom_step};
+        next.validate().map_err(zbus::fdo::Error::InvalidArgs)?;
+        self.preferences.lock()
+            .map_err(|_| zbus::fdo::Error::Failed("Settings unavailable".into()))?
+            .save(next).map_err(|_| zbus::fdo::Error::Failed("Cannot save preferences".into()))
+    }
+
     fn get_view(&self) -> zbus::fdo::Result<String> {
         let view = self.with_db(|db| db.load_view())?;
         serde_json::to_string(&view)
@@ -169,7 +187,11 @@ fn data_file() -> Result<PathBuf, Box<dyn Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let storage = db::Storage::open(&data_file()?)?;
-    let api = NoteApi { storage: Mutex::new(storage) };
+    let settings_path = settings::SettingsStore::default_path()?;
+    let api = NoteApi {
+        storage: Mutex::new(storage),
+        preferences: Mutex::new(settings::SettingsStore::open(settings_path)),
+    };
     let _conn = connection::Builder::session()?
         .name(SERVICE)?
         .serve_at(OBJECT, api)?

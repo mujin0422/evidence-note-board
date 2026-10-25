@@ -31,6 +31,11 @@ const XML = `<node>
     </method>
     <method name="DeleteConnection"><arg type="s" direction="in"/></method>
     <method name="DeleteNote"><arg type="s" direction="in"/></method>
+    <method name="GetSettings"><arg type="s" direction="out"/></method>
+    <method name="SaveSettings">
+      <arg type="b" direction="in"/><arg type="b" direction="in"/>
+      <arg type="d" direction="in"/>
+    </method>
     <method name="GetView"><arg type="s" direction="out"/></method>
     <method name="SaveView">
       <arg type="d" direction="in"/><arg type="d" direction="in"/>
@@ -74,6 +79,16 @@ export class NoteService {
     async listNotes() {
         const [payload] = await this._proxy.ListNotesAsync();
         return JSON.parse(payload);
+    }
+
+    async getSettings() {
+        const [payload] = await this._proxy.GetSettingsAsync();
+        return JSON.parse(payload);
+    }
+
+    saveSettings(options) {
+        return this._enqueue(() => this._proxy.SaveSettingsAsync(
+            options.show_hud, options.show_strings, options.zoom_step));
     }
 
     async getView() {
