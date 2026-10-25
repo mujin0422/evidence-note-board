@@ -119,3 +119,11 @@ tra đóng gói. Cần kiểm nghiệm trực tiếp GNOME Classic 50.5 Wayland.
 dữ liệu D-Bus CRUD, St.DrawingArea với cairo dispose và đóng gói.
 Rust tests xác minh backfill, idempotent, cascade, restart persistence.
 Cần kiểm thử trực tiếp GNOME Classic 50.5/Wayland.
+
+## Phase 4.3 — hiển thị dây và cascade
+
+Node stringMath kiểm tra vị trí dây theo pan và zoom; Python
+check_phase4_wire_render.py kiểm tra lớp vẽ root dưới world, surface
+bằng viewport và ràng buộc self/cascade. Rust test thử một hub có hai
+dây cộng với dây độc lập, sau khi xóa hub phải giữ nguyên dây độc lập.
+Nghiệm thu hiển thị bắt buộc thử GNOME Wayland thực tế.

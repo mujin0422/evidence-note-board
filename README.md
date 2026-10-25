@@ -211,3 +211,11 @@ bash scripts/setup-dev.sh
 Đăng xuất và đăng nhập lại GNOME Classic Wayland sau khi cập nhật
 extension. SQLite schema không đổi; không xóa database/ảnh cũ.
 Xem [PHASE_03](docs/phases/PHASE_03.md) để nghiệm thu.
+
+## Phase 4.3 — lỗi dây đỏ không thấy trên board
+
+Bản vá chuyển Cairo/St.DrawingArea sang screen-space viewport, dưới
+paper, chiếu endpoints qua zoom/pan, và kiểm thử không tự nối chính
+mình + xóa pin/note tự dọn các dây liên quan. SQLite và ảnh giữ nguyên.
+Thử branch fix/phase4-visible-strings-cascade-tests bằng script
+setup-dev.sh, rồi logout/login GNOME Wayland để nạp code mới.

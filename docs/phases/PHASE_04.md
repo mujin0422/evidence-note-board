@@ -101,3 +101,22 @@ bash scripts/setup-dev.sh
 
 **CI Node/Rust chỉ xác minh logic toán, DB, D-Bus và nguồn code;
 chưa nghiệm thu GNOME compositor.**
+
+## Phase 4.3 — Sửa dây không hiển thị và kiểm tra ràng buộc
+
+Người dùng xác nhận liên kết lưu thành công nhưng không nhìn thấy dây.
+Lớp vẽ cũ là Cairo surface 4000×3000 gắn vào world bị zoom/pan;
+bản sửa đặt St.DrawingArea trong root, nằm DƯỚI world chứa giấy/pin,
+với kích thước bằng viewport, dùng worldToScreen cho cả đầu dây và
+preview. Điều này tránh texture oversized và không vẽ vào vùng bị
+world-space crop. Repaint lỗi sẽ được ghi journal để dễ phát hiện.
+
+Đã có sẵn hai ràng buộc và nay được kiểm thử chặt hơn:
+- Không thể nối pin với chính mình: UI, D-Bus, storage và SQLite CHECK.
+- Xóa note từ menu pin sẽ xóa pin và tất cả dây dính pin đó nhờ FK
+  cascade; những dây giữa các note khác không ảnh hưởng.
+
+Thử trên Fedora GNOME Classic Wayland: tạo một dây, kiểm tra nó xuất hiện
+ngay; kéo/resize/xoay pin và zoom 25/100/300%; đăng xuất/đăng nhập
+kiểm tra dây vẫn có; xóa note nối 2 dây và xem 2 dây mất đi nhưng
+dây nối các note khác vẫn còn. Trạng thái: chưa nghiệm thu trên máy.

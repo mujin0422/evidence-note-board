@@ -78,6 +78,10 @@
 }
 
 /* Phase 4 custom pushpin: layered GNOME St actors, not an emoji. */
+.evidence-strings-layer {
+    background-color: transparent;
+    border: none;
+}
 .evidence-pin-hit-area {
     background-color: transparent;
     border: none;
