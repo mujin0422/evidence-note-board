@@ -2,6 +2,7 @@
 
 These source checks are NOT a substitute for compositor tests on Fedora.
 """
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,5 +19,5 @@ assert "new Clutter.Color" not in code_only, "Mutter 50 removed Clutter.Color"
 assert "get_click_count(" not in code_only, "Mutter 50 has no get_click_count()"
 assert "reactive: true,\n            editable: true," in source
 assert "ĐÃ LƯU NHƯNG LỖI HIỂN THỊ" in source
-assert '"version": 3' in metadata
+assert json.loads(metadata)["version"] >= 3
 print("GNOME 50 API regression checks: OK (static only)")
