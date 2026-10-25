@@ -11,6 +11,7 @@ import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
 import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
+import {PIN_SIZE, pinPosition, pinMenuPosition} from './pinMath.js';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
@@ -24,6 +25,8 @@ export class BoardView {
         this._imageButton = null;
         this._imagePicker = null;
         this._resizeSession = null;
+        this._pinMenu = null;
+        this._deletingNotes = new Set();
         this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
         this._backgroundSignal = 0;
@@ -340,6 +343,14 @@ export class BoardView {
         if (!item)
             return;
         item.actor.set_size(note.width, note.height);
+        if (item.pin) {
+            const point = pinPosition(note);
+            item.pin.set_position(point.x, point.y);
+        }
+        if (this._pinMenu?.noteId === note.id) {
+            const point = pinMenuPosition(note);
+            this._pinMenu.actor.set_position(point.x, point.y);
+        }
         item.actor.set_pivot_point(0.5, 0.5);
         item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
         if (note.type === 'image') {
@@ -368,6 +379,123 @@ export class BoardView {
         }
     }
 
+    _installPin(note) {
+        const item = this._notes.get(note.id);
+        if (!item)
+            return;
+        // A separate world actor prevents paper resize/edit handlers from
+        // intercepting pin drag or its right-click context menu.
+        const pin = new St.Widget({
+            reactive: true, can_focus: true,
+            layout_manager: new Clutter.FixedLayout(),
+            style_class: 'evidence-pin-hit-area',
+        });
+        pin.set_size(PIN_SIZE, PIN_SIZE);
+        for (const [style, x, y, width, height] of [
+            ['evidence-pin-stem', 18, 25, 4, 13],
+            ['evidence-pin-shadow', 5, 4, 31, 30],
+            ['evidence-pin-metal', 6, 3, 28, 28],
+            ['evidence-pin-head', 9, 6, 22, 22],
+            ['evidence-pin-glint', 13, 9, 7, 5],
+        ]) {
+            const layer = new St.Widget({reactive: false, style_class: style});
+            layer.set_size(width, height);
+            layer.set_position(x, y);
+            pin.add_child(layer);
+        }
+        pin.connect('button-press-event', (_actor, event) => {
+            this._doubleClick.reset();
+            if (event.get_button() === 1) {
+                this._closePinMenu();
+                return this._startNoteDrag(event, note);
+            }
+            if (event.get_button() === 3) {
+                this._togglePinMenu(note);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_STOP;
+        });
+        pin.connect('button-release-event', () => Clutter.EVENT_STOP);
+        item.pin = pin;
+        this._world.add_child(pin);
+        const point = pinPosition(note);
+        pin.set_position(point.x, point.y);
+    }
+
+    _closePinMenu() {
+        if (!this._pinMenu)
+            return;
+        this._pinMenu.actor.destroy();
+        this._pinMenu = null;
+    }
+
+    _togglePinMenu(note) {
+        if (this._pinMenu?.noteId === note.id) {
+            this._closePinMenu();
+            return;
+        }
+        this._closePinMenu();
+        const menu = new St.BoxLayout({
+            reactive: true,
+            orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'evidence-pin-menu',
+        });
+        menu.add_child(new St.Label({
+            text: note.type === 'image' ? 'ẢNH ĐÃ GHIM' : 'GHI CHÚ ĐÃ GHIM',
+            reactive: false, style_class: 'evidence-pin-menu-title',
+        }));
+        const remove = new St.Button({
+            label: note.type === 'image' ? 'Xóa ảnh' : 'Xóa ghi chú',
+            can_focus: true, style_class: 'evidence-pin-delete',
+        });
+        let armed = false;
+        remove.connect('clicked', () => {
+            if (!armed) {
+                armed = true;
+                remove.set_label('Xác nhận xóa');
+                remove.add_style_pseudo_class('confirm');
+                return;
+            }
+            this._deletePinnedNote(note);
+        });
+        menu.add_child(remove);
+        const cancel = new St.Button({
+            label: 'Hủy', can_focus: true, style_class: 'evidence-pin-cancel',
+        });
+        cancel.connect('clicked', () => this._closePinMenu());
+        menu.add_child(cancel);
+        this._world.add_child(menu);
+        this._pinMenu = {noteId: note.id, actor: menu};
+        const point = pinMenuPosition(note);
+        menu.set_position(point.x, point.y);
+    }
+
+    _deletePinnedNote(note) {
+        if (!this._service || !this._alive || this._deletingNotes.has(note.id))
+            return;
+        const id = note.id;
+        this._deletingNotes.add(id);
+        // NoteService serializes queued UpdateNote/UpdateGeometry/DeleteNote.
+        this._flushNote(id);
+        this._service.deleteNote(id).then(() => {
+            if (!this._alive)
+                return;
+            this._closePinMenu();
+            this._cancelNoteTimer(id);
+            const item = this._notes.get(id);
+            if (item) {
+                item.pin?.destroy();
+                item.actor.destroy();
+                this._notes.delete(id);
+            }
+            this._setStatus('PHASE 4 · đã xóa qua pin');
+        }).catch(error => {
+            console.warn('Evidence Note Board: pin deletion failed', error.message);
+            if (this._alive)
+                this._setStatus('LỖI XÓA QUA D-BUS · xem journalctl');
+        }).finally(() => this._deletingNotes.delete(id));
+    }
+
     _renderImageNote(note) {
         if (!this._alive || this._notes.has(note.id))
             return;
@@ -380,30 +508,6 @@ export class BoardView {
         });
         paper.set_size(note.width, note.height);
         paper.set_position(note.x, note.y);
-        const header = new St.BoxLayout({
-            reactive: true, style_class: 'evidence-photo-header',
-        });
-        // Decorative pin, no visible drag/resize/rotate controls.
-        header.add_child(new St.Label({
-            text: '●', reactive: false, style_class: 'evidence-note-handle',
-        }));
-        header.add_child(new St.Widget({x_expand: true, reactive: false}));
-        const remove = new St.Button({label: '×', style_class: 'evidence-delete'});
-        remove.connect('clicked', () => {
-            if (remove.label !== 'Xóa?') {
-                remove.set_label('Xóa?');
-                return;
-            }
-            this._service?.deleteNote(note.id).then(() => {
-                if (this._alive) {
-                    this._notes.get(note.id)?.actor.destroy();
-                    this._notes.delete(note.id);
-                }
-            }).catch(() => this._saveError());
-        });
-        header.add_child(remove);
-        paper.add_child(header);
-
         // Icons are square by design. Use an image texture and aspect
         // gravity instead so wide/tall photographs retain their shape.
         const texture = St.TextureCache.get_default();
@@ -418,7 +522,8 @@ export class BoardView {
 
         this._notes.set(note.id, {note, actor: paper, photo});
         this._world.add_child(paper);
-        this._connectPaperGestures(paper, note, remove);
+        this._connectPaperGestures(paper, note);
+        this._installPin(note);
         this._applyGeometry(note);
     }
 
@@ -497,7 +602,7 @@ export class BoardView {
         if (kind === 'edit')
             return Clutter.EVENT_PROPAGATE;
         if (kind === 'drag')
-            return this._startNoteDrag(event, note);
+            return Clutter.EVENT_STOP; // Phase 4: move by pin only.
         if (!this._beginGrab())
             return Clutter.EVENT_PROPAGATE;
         this._dragPoint = {x, y};
@@ -509,10 +614,8 @@ export class BoardView {
         return Clutter.EVENT_STOP;
     }
 
-    _connectPaperGestures(paper, note, removeButton) {
+    _connectPaperGestures(paper, note) {
         paper.connect('button-press-event', (_actor, event) => {
-            if (event.get_source() === removeButton)
-                return Clutter.EVENT_PROPAGATE;
             const result = this._startPaperGesture(event, note, paper);
             if (result === Clutter.EVENT_STOP)
                 return result;
@@ -564,6 +667,7 @@ export class BoardView {
             this._dragNote.y += dy / this._view.zoom;
             this._notes.get(this._dragNote.id)?.actor.set_position(
                 this._dragNote.x, this._dragNote.y);
+            this._applyGeometry(this._dragNote);
         } else {
             this._view = panBy(this._view, dx, dy);
             this._applyView();
@@ -618,35 +722,8 @@ export class BoardView {
         paper.set_size(note.width, note.height);
         paper.set_position(note.x, note.y);
 
-        // The pin/drag handle remains separate from the editable paper area.
-        const bar = new St.BoxLayout({
-            reactive: true,
-            style_class: 'evidence-note-header',
-        });
-        bar.add_child(new St.Label({
-            text: '●', reactive: false, style_class: 'evidence-note-handle',
-        }));
-        bar.add_child(new St.Widget({x_expand: true, reactive: false}));
-
-        const remove = new St.Button({
-            label: '×',
-            style_class: 'evidence-delete',
-        });
-        remove.connect('clicked', () => {
-            if (remove.label !== 'Xóa?') {
-                remove.set_label('Xóa?');
-                return;
-            }
-            this._flushNote(note.id);
-            this._service?.deleteNote(note.id).then(() => {
-                if (this._alive) {
-                    this._notes.get(note.id)?.actor.destroy();
-                    this._notes.delete(note.id);
-                }
-            }).catch(() => this._saveError());
-        });
-        bar.add_child(remove);
-        paper.add_child(bar);
+        // The paper is entirely an editor; pin and context menu live
+        // above it in separate world actors.
 
         // One editable multiline field directly on the paper: no St.Entry,
         // CSS textbox, title row or visually separate editor background.
@@ -676,7 +753,7 @@ export class BoardView {
         });
         paper.add_child(body);
         // Border gestures do not interfere with the multiline editor.
-        this._connectPaperGestures(paper, note, remove);
+        this._connectPaperGestures(paper, note);
 
         body.connect('notify::text', () => {
             this._syncTextHeight(note);
@@ -684,6 +761,7 @@ export class BoardView {
         });
         this._notes.set(note.id, {note, actor: paper, body});
         this._world.add_child(paper);
+        this._installPin(note);
         this._applyGeometry(note);
         // Measure after allocation; Pango may not know the final width
         // immediately when an actor is first placed on the board.
@@ -741,6 +819,8 @@ export class BoardView {
     }
 
     destroy() {
+        this._closePinMenu();
+        this._deletingNotes.clear();
         this._alive = false;
         this._connectionRevision++;
         if (this._backendWatchId) {
@@ -769,6 +849,8 @@ export class BoardView {
         for (const id of this._stageSignals)
             global.stage.disconnect(id);
         this._stageSignals = [];
+        for (const item of this._notes.values())
+            item.pin?.destroy();
         this._notes.clear();
         this._root?.destroy();
         this._root = null;
