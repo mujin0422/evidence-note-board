@@ -89,3 +89,40 @@
 6. Nếu lỗi, dùng `journalctl --user -b -o cat --no-pager | grep -B 4 -A 7 -E 'Evidence Note Board|boardView.js|TypeError|Gjs-CRITICAL'` để lấy **thông báo lỗi và stack**, thay vì chỉ grep tên extension.
 
 **Trạng thái:** bản sửa được bổ sung vào source/CI; nghiệm thu desktop thật còn chờ phản hồi của người kiểm thử. Không đóng Phase 2 khi chưa PASS.
+
+## P2.2 — Double-click vùng trống và editor nhiều dòng, không viền
+
+**Đầu vào nghiệm thu thực tế:** người dùng Fedora GNOME Classic 50.5 đã xác nhận
+nút `+ GHI CHÚ` hoạt động, chỉnh sửa nội dung thành công, và
+`ListNotes` trả về 4 bản ghi UUID trong SQLite. Như vậy kết nối backend và
+persistence qua nút bấm đã có bằng chứng ở mức thao tác máy thật. Tuy nhiên,
+double-click chưa hoạt động và trải nghiệm editor chưa đúng yêu cầu.
+
+**Phân tích:** bản trước chỉ xử lý hai lần nhấp khi
+`event.get_source() === this._root` (hoặc `this._world`).
+Clutter bubbling/event picking trong GNOME Classic có thể trả về actor khác;
+kiểm tra định danh như vậy dễ bỏ sót sự kiện. Bản P2.2 dùng hit-testing
+tọa độ canvas: loại trừ note hiện có, thanh trạng thái và nút tạo; sau đó
+nhận diện hai primary presses gần nhau bằng timestamp/khoảng cách.
+
+**Editor:** Clutter.Text dùng `activatable=false` để Enter chèn dấu xuống
+dòng; `single_line_mode=false` và `line_wrap=true` để hiển thị nội dung
+nhiều dòng. Khi click body, gọi `grab_key_focus()` để nhận bàn phím.
+St.Entry dùng một màu chữ trên nền `transparent` ở cả normal/focus/hover,
+bỏ border, border-image và box-shadow. Dữ liệu vẫn qua API
+`UpdateNote` có sẵn, không chỉnh sửa schema.
+
+**Kiểm thử sau khi cài extension P2.2:**
+
+- [ ] Tại zoom 100% và 25%, double-click **vùng trống** tạo đúng một note.
+- [ ] Double-click trong note cũ hoặc lên nút + không sinh note mới.
+- [ ] Single-click, hai click cách xa nhau hoặc quá chậm không tạo note.
+- [ ] Title và body không xuất hiện viền trắng/bóng khi focus hoặc hover.
+- [ ] Body nhập được ba dòng bằng Enter; Unicode tiếng Việt giữ nguyên.
+- [ ] Sau ít nhất một giây và disable/re-enable, toàn bộ dấu xuống dòng vẫn còn.
+- [ ] Note còn nguyên sau logout/login và `ListNotes` chứa nội dung mới.
+- [ ] Không bị treo Shell, không ảnh hưởng kéo note/pan hay nút + GHI CHÚ.
+
+Bài test Node xác minh phép hit-test/toạ độ; Python kiểm tra các thuộc tính
+editor. **Chưa xác nhận trên GNOME compositor thật cho đến khi người dùng
+chạy lại và cung cấp kết quả.**

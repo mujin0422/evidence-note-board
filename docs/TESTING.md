@@ -65,3 +65,13 @@ Các test thuần JavaScript không chứng minh tính tương thích pointer pi
 - [ ] Kiểm tra full journal (bao gồm dòng lỗi gốc) thay vì grep riêng tên extension.
 
 Bộ test `python3 tests/check_gnome50_api.py` ngăn tái sử dụng `Clutter.Color` đã bị loại bỏ trong GNOME 50. Đây chỉ là kiểm tra tĩnh, không thay thế nghiệm thu GNOME Classic.
+
+## P2.2 — Kiểm thử double-click và editor trên giấy
+
+Dùng `node --test tests/noteHitTest.test.js tests/doubleClickTracker.test.js`
+để kiểm thử lựa chọn vùng trống; `python3 tests/check_note_editor.py`
+kiểm tra các thuộc tính của Clutter.Text và CSS (static only).
+Tại Fedora GNOME Classic 50.5, kiểm tra Enter tạo ba dòng độc lập,
+focus không làm đổi màu giấy, và double-click vùng trống ở zoom 25%/100%.
+Xác minh D-Bus ListNotes lưu \u005c\u005cn/newline thực tế sau khi reload;
+xem [PHASE_02](phases/PHASE_02.md).

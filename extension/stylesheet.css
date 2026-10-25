@@ -33,11 +33,16 @@
     font-weight: bold;
     padding: 0 6px;
 }
-.evidence-edit-title {
+.evidence-edit-title,
+.evidence-edit-title:focus,
+.evidence-edit-title:hover {
     color: #443628;
-    background-color: rgba(255, 255, 255, 0.22);
-    border: 0;
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    border-image: none;
     box-shadow: none;
+    padding: 0;
     font-size: 16px;
     font-weight: bold;
 }
