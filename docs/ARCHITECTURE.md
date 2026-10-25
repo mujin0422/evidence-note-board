@@ -106,8 +106,9 @@ SQLite schema modifications. Rust's typed SaveSettings validates data
 and atomically renames a temporary file; GNOME Settings overlay is a
 small St.BoxLayout on the primary monitor.
 
-GNOME layoutManager.monitors and primaryIndex decide toolbar placement
-while note/connection storage remains world-space. On backend loss,
+Phase 5 now targets one screen only. Toolbar location is defined by
+`singleScreenLayout(stageWidth, stageHeight)`, not by monitor enumeration.
+Note/connection storage remains world-space. On backend loss,
 GJS preserves note actors/dirty content, retries D-Bus with capped
 exponential backoff and persists changes after reconnect.
 

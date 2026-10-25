@@ -30,7 +30,11 @@ done
 rm -f "$TARGET/image-drop-target.py"
 
 echo "Đã chép GNOME extension tại $TARGET"
-echo "Cần chạy scripts/install-backend-dev.sh trước khi bật extension."
+if systemctl --user is-active --quiet evidence-note-board.service; then
+    echo "✓ Backend đã hoạt động; không cần chạy lại install-backend-dev.sh."
+else
+    echo "⚠ Backend chưa chạy. Hãy dùng bash scripts/setup-dev.sh để cài và bật tự động."
+fi
 echo "Đăng xuất/đăng nhập lại nếu GNOME chưa tìm thấy extension mới."
 echo "Bật: gnome-extensions enable $UUID"
 echo "Tắt: gnome-extensions disable $UUID"
