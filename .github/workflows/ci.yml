@@ -22,8 +22,9 @@ jobs:
           node --check extension/noteHitTest.js
           node --check extension/noteContent.js
           node --check extension/geometry.js
+          node --check extension/pinMath.js
       - name: Camera tests
-        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js
+        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js tests/pinMath.test.js
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py
@@ -32,6 +33,7 @@ jobs:
           python3 tests/check_note_editor.py
           python3 tests/check_image_notes.py
           python3 tests/check_phase3_interactions.py
+          python3 tests/check_phase4_pin.py
           python3 tests/check_autostart.py
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh scripts/setup-dev.sh
       - name: Package

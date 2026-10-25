@@ -1,5 +1,26 @@
 # Evidence Note Board
 
+## Phase 4.1 — ghim đỏ và thao tác từ pin
+
+Mỗi note/ảnh có đầu ghim đỏ 3D ở giữa mép trên. Giữ chuột trái vào pin
+rồi kéo để di chuyển. Nhấp chuột phải lên pin để mở menu, chọn Xóa rồi
+Xác nhận xóa lần thứ hai; không còn nút × trên giấy. Text editor,
+resize và rotate Phase 3 vẫn hoạt động.
+
+```bash
+git fetch origin
+git switch --track origin/feat/phase4-interactive-pins
+bash scripts/setup-dev.sh
+```
+
+Đăng xuất/đăng nhập GNOME Wayland một lần. Xem checklist
+[Phase 4](docs/phases/PHASE_04.md).
+
+**Dây đỏ nối pin chưa được triển khai:** Phase 4 mới xong phần pin và
+sẽ cần nghiệm thu máy thật trước khi làm stringing.
+
+---
+
 ## Phase 3 UI tối giản (mới)
 
 Ảnh nhập qua `+ ẢNH` giữ nguyên tỉ lệ ngang/dọc; không còn thả ảnh

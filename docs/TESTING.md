@@ -103,3 +103,10 @@ nhận diện mép/góc và ratio ảnh; kiểm tra tĩnh
 `python3 tests/check_phase3_interactions.py` để chắc chắn nút/contract
 không quay lại. Theo checklist [PHASE_03](phases/PHASE_03.md), cần
 nghiệm thu GNOME Shell thật sau khi cập nhật extension.
+
+## Phase 4.1 — pin và thao tác xóa
+
+`node --test tests/pinMath.test.js`: tính vị trí pin trên tâm mép
+trên, giữ đúng khi resize/xoay. `python3 tests/check_phase4_pin.py`:
+tránh còn nút ×, xác nhận 2 bước, nhấn phải mở menu, pin riêng và kiểm
+tra đóng gói. Cần kiểm nghiệm trực tiếp GNOME Classic 50.5 Wayland.

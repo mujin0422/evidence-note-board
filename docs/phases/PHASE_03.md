@@ -67,3 +67,10 @@ bash scripts/setup-dev.sh
 
 Sau khi cài extension mới trên Wayland, đăng xuất/đăng nhập GNOME
 Classic. Không xóa `evidence.db` hay thư mục `assets/`.
+
+## Chuyển giao sang Phase 4.1
+
+Người dùng ngày 25/10/2026 xác nhận thao tác chính Phase 3 hoạt động,
+nhưng nút xóa × hiện tại không còn nhận click. Thay vì sửa nút × ở Phase 3,
+đã thống nhất chuyển quyền xóa sang menu **chuột phải vào pin** ở Phase
+4 và chỉ dùng **giữ pin** để kéo note/ảnh. Xem [PHASE_04](PHASE_04.md).
