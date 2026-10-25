@@ -1,6 +1,6 @@
 # Evidence Note Board
 
-## Phase 5 — Production Integration (Draft)
+## Phase 5 — Single-screen Production Integration
 
 Autostart (từ Phase 2), **bố cục một màn hình duy nhất**,
 tự kết nối lại backend, Settings ⚙ cục bộ, tối ưu vẽ dây đỏ và
@@ -9,7 +9,7 @@ backup/restore SQLite + image assets. **Đã bỏ hỗ trợ đa màn hình**.
 ```bash
 cd ~/Code/Project/EvidenceNoteBoard
 git fetch origin
-git switch --track origin/feat/phase5-production-integration
+git switch -c fix/phase5-single-screen-install-output --track origin/fix/phase5-single-screen-install-output
 bash scripts/setup-dev.sh
 ```
 
@@ -25,7 +25,9 @@ Sau đó logout/login GNOME Wayland. Không xóa database.
   hash ảnh và integrity SQLite. Xem
   [Phase 5](docs/phases/PHASE_05.md) trước khi restore.
 
-**Phase 5 cần kiểm thử Fedora một màn hình và khả năng phục hồi backend.**
+**Phase 5: đã bỏ chức năng đa màn hình theo yêu cầu.**
+Cần kiểm thử Fedora một màn hình và khả năng phục hồi backend.
+Sau khi PR được merge vào dev, cập nhật bằng `git switch dev && git pull --ff-only origin dev`.
 Không coi CI xanh là xác nhận FPS hoặc trải nghiệm compositor.
 
 ---

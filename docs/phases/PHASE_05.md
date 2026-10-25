@@ -65,7 +65,7 @@ one Fedora GNOME Classic screen. RPM/release automation remains Phase 6.
 
 ```bash
 git fetch origin
-git switch --track origin/feat/phase5-production-integration
+git switch -c fix/phase5-single-screen-install-output --track origin/fix/phase5-single-screen-install-output
 bash scripts/setup-dev.sh
 # Logout/login GNOME Wayland once to reload extension source.
 ```

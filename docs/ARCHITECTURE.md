@@ -2,7 +2,7 @@
 
 ## 1. Kiến trúc theo từng phase
 
-**Phase 1 (PoC, chưa xác minh trên thiết bị):** GNOME Shell Extension nhúng `St.Widget` vào `Main.layoutManager._backgroundGroup`, nằm theo thiết kế dưới ứng dụng; sử dụng `canvasMath.js` để transform camera. Đây là **API private**, không cam kết tương thích lâu dài. GNOME Classic bổ sung panel/extension, cần test stacking, focus và đa màn hình.
+**Phase 1 (PoC, chưa xác minh trên thiết bị):** GNOME Shell Extension nhúng `St.Widget` vào `Main.layoutManager._backgroundGroup`, nằm theo thiết kế dưới ứng dụng; sử dụng `canvasMath.js` để transform camera. Đây là **API private**, không cam kết tương thích lâu dài. GNOME Classic bổ sung panel/extension; cần kiểm tra stacking và focus trên một màn hình.
 
 **Phase 2 (implementation hiện tại, chờ nghiệm thu):** giữ extension trên GNOME Shell; thêm backend Rust user service + SQLite, giao tiếp D-Bus bất đồng bộ. Không gọi SQLite từ compositor, không khởi tạo web app.
 
@@ -81,7 +81,7 @@ sequenceDiagram
 
 ## 6. Những vấn đề chưa xác minh
 
-GNOME Classic 50.5 pointer/focus/input, `Clutter.Text` multiline editing, `Gio.DBusProxy` introspection trên session thật, systemd user service cài trên Fedora, crash recovery, clipboard/IME tiếng Việt, race khi logout lúc debounce, shell/GPU đa màn hình, benchmark. Không đưa các mục đó vào nhóm 'PASS' chỉ dựa trên source hoặc CI.
+GNOME Classic 50.5 pointer/focus/input, `Clutter.Text` multiline editing, `Gio.DBusProxy` introspection trên session thật, systemd user service cài trên Fedora, crash recovery, clipboard/IME tiếng Việt, race khi logout lúc debounce, hiệu năng shell/GPU trên một màn hình, benchmark. Không đưa các mục đó vào nhóm 'PASS' chỉ dựa trên source hoặc CI.
 
 Tài liệu API: https://gjs.guide/guides/gio/dbus.html · https://docs.rs/zbus/latest/zbus/ · https://docs.rs/rusqlite/latest/rusqlite/
 
