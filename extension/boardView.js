@@ -8,6 +8,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {panBy, screenToWorld, zoomAt} from './canvasMath.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
+import {isEmptyBoardPoint} from './noteHitTest.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
@@ -236,17 +237,27 @@ export class BoardView {
             return Clutter.EVENT_PROPAGATE;
 
         if (event.get_button() === 1) {
-            const source = event.get_source();
-            // Never add notes when double-clicking an existing card, its editor,
-            // or the create button. Only blank canvas interactions are accepted.
-            if (source !== this._root && source !== this._world) {
+            const [x, y] = event.get_coords();
+            // The event source can differ from the root even for a blank
+            // background click on GNOME Classic. Decide from screen/world
+            // geometry instead; don't intercept clicks inside note editors.
+            const uiRects = [
+                {x: 0, y: 0, width: 510, height: 145},
+            ];
+            for (const actor of [this._hud, this._createButton]) {
+                if (!actor)
+                    continue;
+                const [ax, ay] = actor.get_position();
+                const [width, height] = actor.get_size();
+                uiRects.push({x: ax, y: ay, width, height});
+            }
+            const notes = Array.from(this._notes.values(), item => item.note);
+            if (!isEmptyBoardPoint(this._view, {x, y}, notes, uiRects)) {
                 this._doubleClick.reset();
                 return Clutter.EVENT_PROPAGATE;
             }
-            const [x, y] = event.get_coords();
-            // Mutter Clutter.Event no longer exposes get_click_count().
-            // Detect consecutive primary presses using the documented
-            // get_time/get_coords methods and reject far-apart clicks.
+            // GNOME Shell 50 exposes get_time()/get_coords(), not a
+            // click-count method. Treat two nearby presses as a gesture.
             if (this._doubleClick.register(event.get_time(), x, y)) {
                 this._createNoteAtScreen(x, y);
                 return Clutter.EVENT_STOP;
@@ -364,6 +375,7 @@ export class BoardView {
         const title = new St.Entry({
             text: note.title, can_focus: true, style_class: 'evidence-edit-title',
         });
+        title.clutter_text.set_single_line_mode(true);
         paper.add_child(title);
 
         // Clutter.Text supports multiline Unicode editing in GNOME Shell.
@@ -377,12 +389,19 @@ export class BoardView {
             reactive: true,
             editable: true,
             selectable: true,
+            activatable: false,
             single_line_mode: false,
             line_wrap: true,
             line_wrap_mode: Pango.WrapMode.WORD_CHAR,
             color: ink,
         });
-        body.set_size(228, 88);
+        body.set_size(228, 92);
+        // Clutter.Text needs explicit keyboard focus in the desktop layer.
+        // Keep propagation so its own handler can position the text cursor.
+        body.connect('button-press-event', () => {
+            body.grab_key_focus();
+            return Clutter.EVENT_PROPAGATE;
+        });
         paper.add_child(body);
         title.clutter_text.connect('notify::text', () => this._scheduleNote(note.id));
         body.connect('notify::text', () => this._scheduleNote(note.id));

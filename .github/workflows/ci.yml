@@ -19,13 +19,15 @@ jobs:
           node --check extension/canvasMath.js
           node --check extension/noteService.js
           node --check extension/doubleClickTracker.js
+          node --check extension/noteHitTest.js
       - name: Camera tests
-        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js
+        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py
           python3 tests/check_extension.py
           python3 tests/check_gnome50_api.py
+          python3 tests/check_note_editor.py
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh
       - name: Package
         run: |

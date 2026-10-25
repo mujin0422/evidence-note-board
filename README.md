@@ -88,3 +88,13 @@ gnome-extensions enable evidence-note-board@mujin0422.github.io
 ```
 
 Xem [kiểm thử và phục hồi](docs/phases/PHASE_02.md) để kiểm tra dữ liệu bằng D-Bus, journal logs và xem trạng thái trên HUD.
+
+## P2.2 — Double-click và nhập nhiều dòng trên giấy
+
+Bản sửa `fix/phase2-multiline-editor-doubleclick` nhận diện double-click
+bằng hit-testing tọa độ vùng trống thay vì so sánh `event.get_source()`
+với một actor duy nhất. Editor body hỗ trợ Enter xuống dòng,
+`St.Entry` tiêu đề trong suốt cả khi focus, không viền/bóng.
+Không có thay đổi schema/backend. Cài lại qua `bash scripts/install-dev.sh`,
+đăng xuất/đăng nhập để GNOME Wayland nạp module mới; xem
+[docs/phases/PHASE_02.md](docs/phases/PHASE_02.md).
