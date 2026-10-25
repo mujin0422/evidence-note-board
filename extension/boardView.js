@@ -35,6 +35,7 @@ export class BoardView {
         this._reconnectTimer = 0;
         this._reconnectAttempts = 0;
         this._paintTimer = 0;
+        this._resizeTimer = 0;
         this._resizeSession = null;
         this._pinMenu = null;
         this._stringsLayer = null;
@@ -318,7 +319,25 @@ export class BoardView {
             this._stringsLayer.set_size(global.stage.width, global.stage.height);
             this._queueStrings();
         }
-        this._confineAllNotes(true);
+        // A compositor resize may report intermediate allocations during
+        // mode changes. Debounce before mutating/persisting note positions.
+        if (this._resizeTimer)
+            GLib.Source.remove(this._resizeTimer);
+        this._resizeTimer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,150,()=>{
+            this._resizeTimer=0;
+            if (this._alive && global.stage.width >= 400 && global.stage.height >= 300) {
+                const limit=maxZoomThatFits(
+                    [...this._notes.values()].map(item=>item.note),
+                    global.stage.width,global.stage.height);
+                if (this._view.zoom>limit) {
+                    this._view={zoom:limit,panX:0,panY:0};
+                    this._applyView();
+                    this._scheduleView();
+                }
+                this._confineAllNotes(true);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
         this._positionPinMenu();
     }
 
@@ -1224,6 +1243,9 @@ export class BoardView {
         if (this._paintTimer)
             GLib.Source.remove(this._paintTimer);
         this._paintTimer=0;
+        if (this._resizeTimer)
+            GLib.Source.remove(this._resizeTimer);
+        this._resizeTimer=0;
         if (this._reconnectTimer)
             GLib.Source.remove(this._reconnectTimer);
         this._reconnectTimer=0;
