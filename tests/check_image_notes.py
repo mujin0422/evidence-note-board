@@ -8,8 +8,11 @@ backend = (root / "backend/src/db.rs").read_text(encoding="utf-8")
 assets = (root / "backend/src/assets.rs").read_text(encoding="utf-8")
 assert "ImportImageAsync" in service
 assert "Gio.Subprocess.new(" in frontend
-assert "St.Icon({" in frontend
-assert "new Gio.FileIcon" in frontend
+assert "St.TextureCache.get_default()" in frontend
+assert "texture.load_file_async(" in frontend
+assert "Clutter.ContentGravity.RESIZE_ASPECT" in frontend
+assert "new St.Icon(" not in frontend
+assert "new Gio.FileIcon" not in frontend
 assert "if (note.type === 'image')" in frontend
 assert "this._imagePicker?.force_exit();" in frontend
 assert "MAX_BYTES" in assets and "MAX_PIXELS" in assets

@@ -1,5 +1,5 @@
-// Pure geometry utilities for image resize, paper width, and rotation.
-// All dimensions are in board/world coordinates, independent of zoom.
+// World-space note geometry and invisible local-coordinate border gestures.
+// Tests run with Node; GNOME Shell event handling is checked on Fedora.
 export const MIN_TEXT_WIDTH = 200;
 export const MIN_IMAGE_WIDTH = 220;
 export const MAX_NOTE_WIDTH = 1200;
@@ -7,6 +7,10 @@ export const MIN_IMAGE_HEIGHT = 110;
 export const MAX_NOTE_HEIGHT = 6000;
 export const MIN_TEXT_HEIGHT = 185;
 export const TEXT_VERTICAL_CHROME = 85;
+export const BORDER_HIT = 16;
+export const CORNER_HIT = 24;
+export const PHOTO_H_MARGIN = 24;
+export const PHOTO_V_MARGIN = 48;
 
 export function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -19,16 +23,22 @@ export function resizedTextWidth(startWidth, deltaScreenX, zoom) {
         MIN_TEXT_WIDTH, MAX_NOTE_WIDTH);
 }
 
-// Lock image aspect ratio across interactive resize, including frame padding.
-// The original width and height always remain the ratio source for the gesture.
+// Lock the underlying *photo* aspect ratio, not the paper frame ratio.
+// White Polaroid margins (24px horizontal, 48px vertical) are excluded.
 export function resizedImage(startWidth, startHeight, deltaScreenX, zoom) {
     if (!Number.isFinite(zoom) || zoom <= 0)
         return {width: startWidth, height: startHeight};
-    const ratio = startHeight / startWidth;
-    const minWidth = Math.max(MIN_IMAGE_WIDTH, MIN_IMAGE_HEIGHT / ratio);
-    const maxWidth = Math.min(MAX_NOTE_WIDTH, MAX_NOTE_HEIGHT / ratio);
+    const ratio = Math.max(1, startHeight - PHOTO_V_MARGIN) /
+        Math.max(1, startWidth - PHOTO_H_MARGIN);
+    const minWidth = Math.max(MIN_IMAGE_WIDTH,
+        PHOTO_H_MARGIN + (MIN_IMAGE_HEIGHT - PHOTO_V_MARGIN) / ratio);
+    const maxWidth = Math.min(MAX_NOTE_WIDTH,
+        PHOTO_H_MARGIN + (MAX_NOTE_HEIGHT - PHOTO_V_MARGIN) / ratio);
     const width = clamp(startWidth + deltaScreenX / zoom, minWidth, maxWidth);
-    return {width: Math.round(width), height: Math.round(width * ratio)};
+    return {
+        width: Math.round(width),
+        height: Math.round(PHOTO_V_MARGIN + (width - PHOTO_H_MARGIN) * ratio),
+    };
 }
 
 export function requiredPaperHeight(textPixelHeight) {
@@ -38,8 +48,43 @@ export function requiredPaperHeight(textPixelHeight) {
         MIN_TEXT_HEIGHT, MAX_NOTE_HEIGHT);
 }
 
-export function rotateBy(angle, increment = 15) {
-    // Store a normalized signed angle within the backend's [-180, 180] range.
-    const degrees = angle + increment;
+export function normalizeAngle(degrees) {
     return ((degrees + 180) % 360 + 360) % 360 - 180;
+}
+
+export function angleDelta(from, to) {
+    return normalizeAngle(to - from);
+}
+
+// Stage coordinates of the unrotated paper center; rotation is about
+// this same pivot and neither zoom nor pan changes the pointer delta.
+export function pointerAngle(screenX, screenY, note, view) {
+    const cx = view.panX + (note.x + note.width / 2) * view.zoom;
+    const cy = view.panY + (note.y + note.height / 2) * view.zoom;
+    return Math.atan2(screenY - cy, screenX - cx) * 180 / Math.PI;
+}
+
+// Hit testing uses actor.transform_stage_point to account for zoom/rotation.
+// Top-left corner = rotate, right edge/bottom-right = resize,
+// paper border = drag, interior of text paper = edit.
+export function gestureAt(x, y, width, height, type, zoom = 1) {
+    if (![x, y, width, height].every(Number.isFinite) ||
+        width <= 0 || height <= 0 ||
+        x < 0 || y < 0 || x > width || y > height)
+        return 'edit';
+    // At 25% zoom a fixed 16px world-space edge would be only 4px
+    // on screen, so widen hit zones while keeping editor usable.
+    const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+    const border = clamp(12 / scale, BORDER_HIT, 48);
+    const corner = clamp(18 / scale, CORNER_HIT, 56);
+    if (x <= corner && y <= corner)
+        return 'rotate';
+    if (type === 'image' &&
+        x >= width - corner && y >= height - corner)
+        return 'resize';
+    if (x >= width - border)
+        return 'resize';
+    if (y <= border || x <= border || y >= height - border)
+        return 'drag';
+    return type === 'image' ? 'drag' : 'edit';
 }

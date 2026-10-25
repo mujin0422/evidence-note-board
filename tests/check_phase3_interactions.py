@@ -1,22 +1,36 @@
-"""Static UI checks for phase 3 interactions (not desktop end-to-end)."""
+"""Static checks for border gestures and removed Phase 3 controls.
+
+CI cannot prove GNOME compositor hit-testing: verify on Fedora Wayland.
+"""
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 js = (root / "extension/boardView.js").read_text(encoding="utf-8")
-backend = (root / "backend/src/db.rs").read_text(encoding="utf-8")
+helper = (root / "extension/geometry.js").read_text(encoding="utf-8")
+service = (root / "extension/noteService.js").read_text(encoding="utf-8")
+db = (root / "backend/src/db.rs").read_text(encoding="utf-8")
 dbus = (root / "backend/src/main.rs").read_text(encoding="utf-8")
-gtk_drop = (root / "extension/image-drop-target.py").read_text(encoding="utf-8")
-required = [
-    "resizedTextWidth(", "resizedImage(", "requiredPaperHeight(",
-    "_syncTextHeight(note)", "get_pixel_size()", "_startResize(event, note)",
-    "_rotatePhoto(note,", "_duplicatePhoto(note)", "updateGeometry(",
-    "duplicateImage(", "Clutter.RotateAxis.Z_AXIS",
-    "_openDropWindow()", "JSON.parse(stdout)",
-]
-for fragment in required:
+installer = (root / "scripts/install-dev.sh").read_text(encoding="utf-8")
+bundle = (root / "scripts/build-extension.sh").read_text(encoding="utf-8")
+
+for fragment in (
+    "gestureAt(", "transform_stage_point(", "pointerAngle(",
+    "angleDelta(", "normalizeAngle(", "get_pixel_size()",
+    "resizedImage(", "resizedTextWidth(", "_connectPaperGestures(",
+    "updateGeometry(", "Clutter.RotateAxis.Z_AXIS",
+    "St.TextureCache.get_default()", "texture.load_file_async(",
+    "Clutter.ContentGravity.RESIZE_ASPECT",
+):
     assert fragment in js, fragment
-assert "update_geometry" in backend and "duplicate_image" in backend
-assert "validate_geometry" in dbus
-assert "Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)" in gtk_drop
-assert "json.dumps(paths, ensure_ascii=False)" in gtk_drop
-print("Phase 3 source interaction checks: OK (GNOME/GTK UI untested)")
+
+for fragment in ("_dropButton", "_openDropWindow", "_dropProcess", "_duplicatePhoto",
+                 "duplicateImage(", "new St.Icon(", "new Gio.FileIcon(",
+                 "_rotatePhoto(", "_startResize("):
+    assert fragment not in js, fragment
+assert "DuplicateImage" not in service
+assert "duplicate_image" not in db and "duplicate_image" not in dbus
+assert "image-drop-target.py" not in bundle
+assert "rm -f \"$TARGET/image-drop-target.py\"" in installer
+assert "export function gestureAt(" in helper
+assert "PHOTO_H_MARGIN" in helper and "PHOTO_V_MARGIN" in helper
+print("Phase 3 border-gesture and removal checks: OK (not GNOME UI acceptance)")

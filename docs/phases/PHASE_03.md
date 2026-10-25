@@ -1,122 +1,69 @@
-# Phase 03 — Image Notes và phong cách ảnh vintage
+# Phase 03 — Image notes và thao tác trực tiếp trên giấy
 
-**Trạng thái:** Đang triển khai trên PR từ `dev`. Chưa xác minh trên
-Fedora GNOME Classic 50.5 Wayland thực tế.
+**Trạng thái:** Đã triển khai phiên bản chỉnh sửa từ phản hồi thực tế của
+người dùng, cần kiểm thử trên Fedora GNOME Classic 50.5 Wayland để nghiệm thu.
 
-## Scope theo tài liệu dự án
+## Kết quả đã xác minh từ người dùng
 
-Cho phép nhập PNG/JPEG/WebP, sao chép dữ liệu gốc về assets local-first,
-hiển thị ảnh như bản in phòng tối/Polaroid trên board, di chuyển, xóa và
-khôi phục khi đăng nhập. Mở rộng: resize, rotate, duplicate, clipboard,
-drag-and-drop, xử lý trùng file và hiệu ứng vintage.
+- Nhập ảnh PNG/JPEG/WebP bằng **+ ẢNH** qua Zenity đã hoạt động.
+- Phase 2 với text note, SQLite, tạo/kéo/xóa/khôi phục đã đạt MVP.
 
-## Đã code ở bước đầu (cần CI / kiểm thử)
+## Yêu cầu mới / implementation hiện tại
 
-- Rust `assets.rs` kiểm tra định dạng bằng header thực, giải mã ảnh để
-  loại bỏ file hỏng, giới hạn 16 MiB và 20 triệu pixel, SHA-256 checksum.
-- Rust `db.rs` sao chép file vào `assets/UUID.ext`, lưu
-  `notes(type=image)` và `assets` bằng SQLite transaction, lấy đường
-  dẫn ảnh từ thư mục app, xóa asset khi xóa note.
-- D-Bus `ImportImage(s path,d x,d y) -> s JSON note`.
-- GJS nút `+ ẢNH` mở Zenity bất đồng bộ để người dùng chọn file, hiển thị
-  ảnh cục bộ bằng `St.Icon`/`Gio.FileIcon`, cho phép kéo và xóa.
-- Khung ảnh giấy trắng ngà có viền dưới dày hơn. Ảnh nguồn giữ nguyên.
-- CI Rust test, JS syntax, Python static regression cho assets.
+- **BỎ** drag/drop từ Files/Nautilus và cửa sổ GTK4 nhận ảnh.
+  Xóa nút `⇩ THẢ ẢNH` và helper `image-drop-target.py`; script cài
+  chủ động dọn helper còn sót từ phiên bản cũ.
+- **BỎ** duplicate ảnh: không còn nút `⧉` hay API `DuplicateImage`.
+  Các bản sao đã lưu trước đây vẫn được giữ lại (không xóa dữ liệu).
+- **Ảnh không bị ép vuông:** thay `St.Icon + Gio.FileIcon` bằng
+  `St.TextureCache.load_file_async`, ảnh được vẽ trong actor tỉ lệ tự do
+  dùng `Clutter.ContentGravity.RESIZE_ASPECT`. Landscape vẫn landscape,
+  portrait vẫn portrait. Resize tính theo **tỉ lệ ảnh bên trong**,
+  không tính phần viền Polaroid (24 px ngang, 48 px dọc).
+- **Không nút resize/rotate/drag:** bộ nhận diện thao tác trên
+  `paper.transform_stage_point` hoạt động trong local space kể cả
+  khi zoom và xoay, không cần toolbar. Còn nút `×` để xóa sau xác nhận.
+- **Text note:** kéo **mép phải** để thay đổi độ rộng thủ công,
+  chiều cao tự tính lại từ số dòng Pango và tối thiểu 185 px.
+- **Image note:** kéo **mép phải hoặc góc dưới phải** để resize đồng tỷ lệ,
+  kéo **góc trên trái** để xoay theo hướng chuột.
+- **Cả text và image:** kéo **mép trên/trái/dưới** để di chuyển. Click
+  vùng giữa note văn bản vẫn chỉnh sửa chữ nhiều dòng; click vùng giữa
+  ảnh để di chuyển.
+- **Lưu tự động:** thay đổi width/height/rotation qua D-Bus
+  `UpdateGeometry`, vị trí qua `MoveNote`; SQLite schema giữ nguyên,
+  không làm mất note/asset đã có.
 
-## Chưa hoàn thành trong Phase 3
+## Kiểm thử bắt buộc trên Fedora
 
-- [ ] Test thực tế import PNG, JPEG, WebP trên GNOME Classic 50.5.
-- [ ] Kiểm tra hiển thị đúng tỷ lệ, kéo, xóa và khôi phục sau login.
-- [ ] Resize giữ aspect ratio và persist.
-- [ ] Rotate nhẹ và persist.
-- [ ] Duplicate image note (không mất nguồn).
-- [ ] Drag & drop từ file manager trên Wayland nếu API thực sự hỗ trợ.
-- [ ] Paste ảnh clipboard nếu compositor cho phép.
-- [ ] UX khi file picker bị hủy, Zenity chưa cài hoặc ảnh quá giới hạn.
-- [ ] Xử lý trùng hash và dọn asset mồ côi sau crash.
-- [ ] Benchmark nhiều ảnh, giới hạn bộ nhớ GPU.
+- [ ] Nhập 1 ảnh nằm ngang 1200×600: card/ảnh nằm ngang, không bị vuông.
+- [ ] Nhập 1 ảnh dọc 600×1200: card/ảnh đứng dọc, không méo/cắt ảnh.
+- [ ] Resize ảnh bằng mép phải/góc dưới phải ở zoom 25% và 100%; ratio giữ nguyên.
+- [ ] Kéo góc trên trái và xoay ảnh theo chuột; góc xoay còn sau đăng nhập lại.
+- [ ] Kéo mép trên và cạnh trái để di chuyển ảnh/note chữ.
+- [ ] Kéo mép phải text note làm nội dung wrap; chiều cao đổi theo số dòng,
+  Enter và gõ tiếng Việt không bị mất focus hay viền lạ.
+- [ ] Nút + ẢNH vẫn mở file picker và nhập được hình.
+- [ ] Không còn nút ⇩ THẢ ẢNH, ⧉, ↶, ↷, ↘, ↔ hoặc label kéo.
+- [ ] Nút × vẫn xóa đúng note sau xác nhận; xóa/khôi phục dữ liệu đúng.
+- [ ] Kích thước, góc xoay, vị trí, nội dung còn sau logout/login.
+- [ ] Không ảnh hưởng double-click tạo note, Ctrl+Wheel zoom, middle pan.
+- [ ] Không có lỗi GNOME Shell/JS ERROR trong journal sau tương tác.
 
-## Cài bản thử nghiệm (khác Phase 2: phải build lại backend)
+## Trạng thái khác
+
+Clipboard và stress/performance không nằm trong lần sửa UI này.
+Nếu tất cả mục trên PASS trên Fedora, Phase 3 MVP mới có thể đánh dấu
+nghiệm thu; CI Rust/Node/Python không thay thế nghiệm thu desktop.
+
+## Cài và thử
 
 ```bash
-sudo dnf install zenity
+cd ~/Code/Project/EvidenceNoteBoard
 git fetch origin
-git switch --track origin/feat/phase3-image-notes-core
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-systemctl --user stop evidence-note-board.service
-bash scripts/install-backend-dev.sh
-bash scripts/install-dev.sh
-# Logout/Login Wayland, rồi:
-gnome-extensions enable evidence-note-board@mujin0422.github.io
+git switch --track origin/fix/phase3-border-gestures-image-aspect
+bash scripts/setup-dev.sh
 ```
 
-`busctl --user introspect io.github.mujin0422.EvidenceNoteBoard
-/io/github/mujin0422/EvidenceNoteBoard` phải liệt kê `ImportImage`.
-Không xóa `evidence.db` khi cài lại.
-
-## Safety/giới hạn
-
-- Zenity là chương trình file chooser riêng, không phải Electron hoặc cửa
-  sổ wallpaper overlay, chạy ở user scope và không block Shell.
-- D-Bus method nhận đường dẫn absolute do user chọn, nhưng bus session
-  không phải ACL ngăn app cùng user gọi path khác; không dùng để đọc file
-  của người dùng tùy ý hoặc đưa nội dung dữ liệu vào log.
-- Không chặn ứng dụng bình thường khi import. Gỡ extension phải cleanup
-  subprocess chooser đang mở.
-- CI **không** chứng minh bộ giải mã trên GPU hoặc event handling trên
-  GNOME; chỉ chốt Phase 3 khi thử ở máy đích.
-
-## Backend readiness ở Phase 3
-
-Tính năng import ảnh dùng cùng Rust user D-Bus service. Bản vá autostart
-sẽ tự khởi động backend khi đăng nhập và tự reconnect khi service restart,
-tránh phải chạy lệnh `systemctl` trước khi nhấn `+ ẢNH`.
-Dữ liệu image notes và assets cũ được giữ nguyên; cần kiểm thử trên
-GNOME Classic 50.5 trước khi nghiệm thu. Xem [AUTOSTART](../AUTOSTART.md).
-
-## Giai đoạn bổ sung — Resize, Rotate, Duplicate, kéo file ảnh
-
-Đã thêm trong branch `feat/phase3-resize-rotate-duplicate-drop`:
-
-- **Ảnh**: thao tác giữ/kéo ký hiệu `↘` trên thanh ảnh để đổi kích thước,
-  tự giữ tỉ lệ chiều rộng/chiều cao; hai nút `↶/↷` xoay 15° và
-  `⧉` nhân bản bản in, mỗi bản sở hữu asset riêng. Tọa độ, kích
-  thước, góc xoay lưu SQLite qua `UpdateGeometry`.
-- **Ghi chú chữ**: kéo `↔` trên thanh note để thay đổi **chỉ chiều rộng**;
-  chiều cao note tự co giãn tối thiểu theo số dòng thực của Pango layout.
-  Khi đổi chiều ngang, nội dung reflow và chiều cao được đo lại.
-- **Kéo file từ Nautilus**: nút `⇩ THẢ ẢNH` mở cửa sổ nhỏ GTK4
-  riêng biệt, hỗ trợ kéo 1–12 file ảnh từ Files/Nautilus vào. GTK
-  cung cấp `Gdk.FileList` và gửi danh sách path qua stdout JSON cho
-  GNOME Extension nhập bằng D-Bus. Tránh cố gắng dùng
-  `Gtk.DropTarget` trên `Clutter.Actor`, không tương thích với
-  Wayland drag offer cho client khác.
-- Không có thay đổi phá vỡ DB schema hiện tại. Đường dẫn asset bản sao
-  chỉ được lấy từ backend, không tạo URL mạng.
-- Gói Fedora có thể cần `sudo dnf install gtk4 python3-gobject`
-  bên cạnh `zenity`.
-
-**Giới hạn có chủ ý:** hiện thả vào **cửa sổ nhận ảnh GTK**, không
-thả trực tiếp lên wallpaper/board, vì GNOME Shell actor không phải
-GdkSurface nhận GTK Wayland DND. Điều này vẫn là yêu cầu UX chưa hoàn tất
-nếu cần thả trực tiếp vào mặt board. Clipboard cũng chưa làm.
-
-### Kiểm tra trên Fedora GNOME Classic 50.5
-
-- [ ] Bản lưu text dài làm giấy dãn xuống; xóa bớt chữ thì giấy co lại,
-  không thấp hơn chiều cao mặc định.
-- [ ] Resize chiều ngang note bằng `↔` và Enter nhiều dòng; chiều cao
-  tự đổi tương ứng, dữ liệu còn sau logout.
-- [ ] Resize ảnh bằng `↘`, aspect ratio không đổi, khôi phục sau login.
-- [ ] Xoay ảnh bằng `↶` hoặc `↷`, góc xoay lưu/khôi phục.
-- [ ] Nhân bản bằng `⧉`, xóa ảnh gốc không làm mất bản sao.
-- [ ] Mở `⇩ THẢ ẢNH`, kéo PNG, JPEG, WebP từ Nautilus vào cửa sổ,
-  nhiều ảnh được tạo trên board.
-- [ ] Hủy/đóng cửa sổ, không có ảnh giả xuất hiện trên board.
-- [ ] Zoom 25%/100% khi kéo resize; double-click/middle-pan không regress.
-- [ ] Service tự khởi chạy và toàn bộ note + image assets không biến mất
-  khi đăng xuất/đăng nhập lại.
-
-**Chỉ đánh dấu Phase 3 hoàn thành sau khi kiểm thử trên máy**, không chỉ
-sau CI. Nếu người dùng yêu cầu thả trực tiếp lên board, cần nghiên cứu
-Wayland compositor drop bridge riêng; không giả lập hoặc tuyên bố đã hỗ trợ.
+Sau khi cài extension mới trên Wayland, đăng xuất/đăng nhập GNOME
+Classic. Không xóa `evidence.db` hay thư mục `assets/`.

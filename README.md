@@ -1,5 +1,18 @@
 # Evidence Note Board
 
+## Phase 3 UI tối giản (mới)
+
+Ảnh nhập qua `+ ẢNH` giữ nguyên tỉ lệ ngang/dọc; không còn thả ảnh
+từ file manager hoặc nhân bản. Tương tác trực tiếp trên giấy: kéo
+**mép trên/trái/dưới** để di chuyển, **mép phải** để thay đổi chiều
+rộng note hoặc resize ảnh, **góc dưới phải của ảnh** để resize và
+**góc trên trái** để xoay theo chuột. Không hiện nút xoay/resize/kéo.
+Nút xóa `×` vẫn còn. SQLite cũ được giữ lại.
+
+Bản thử nghiệm ở `fix/phase3-border-gestures-image-aspect`.
+Chạy `bash scripts/setup-dev.sh` và đăng xuất/đăng nhập GNOME
+Classic Wayland một lần để nạp lại extension.
+
 ## Cài một lần, tự chạy khi đăng nhập
 
 ```bash
@@ -129,45 +142,29 @@ Nếu đang thử PR chưa merge, checkout `fix/phase2-body-only-notes`, chạy
 `bash scripts/install-dev.sh`, đăng xuất/đăng nhập Wayland rồi bật lại
 extension. Không cần xóa database hay build lại Rust.
 
-## Phase 3 — nhập ảnh bản thử nghiệm
+## Phase 3 — ghi chú hình ảnh theo tỉ lệ gốc
 
-- Dùng nút **+ ẢNH** trên board để chọn file bằng `zenity` (GTK file picker).
-- Chấp nhận PNG/JPEG/WebP tối đa 16 MiB, giới hạn 20 triệu điểm ảnh.
-- Backend Rust kiểm tra nội dung thật của ảnh, sao chép file vào
-  `~/.local/share/evidence-note-board/assets/` và lưu metadata trong
-  SQLite. Ảnh nguồn không bị chỉnh sửa.
-- Board hiển thị ảnh có khung giấy trắng ngà kiểu Polaroid, cho phép di chuyển
-  và xóa (xóa cả bản sao asset), khôi phục khi bật lại extension.
-- Cần cài `zenity` trên Fedora: `sudo dnf install zenity`.
-- **Bản này chưa có** drag/drop từ file manager, paste clipboard, resize,
-  rotate hoặc duplicate; các tính năng này nằm trong checklist Phase 3 chưa
-  hoàn thành tại [PHASE_03](docs/phases/PHASE_03.md).
+Ảnh được chọn bằng `+ ẢNH` (Zenity), sao chép về
+`~/.local/share/evidence-note-board/assets/` và lưu SQLite. Bản
+hiện tại giữ ảnh ngang/dọc nguyên tỉ lệ bằng texture không crop/stretch.
+Không hỗ trợ thả ảnh từ file manager hoặc nhân bản ảnh theo yêu cầu mới.
 
-**Chú ý:** Phase 3 cần build và cài lại backend Rust, không chỉ extension.
+### Tương tác không cần các nút
+
+- Kéo mép trên / mép trái / mép dưới: di chuyển note hoặc ảnh.
+- Kéo mép phải: đổi chiều ngang note chữ; giấy tự cao theo nội dung.
+- Kéo mép phải / góc dưới phải của ảnh: resize đúng tỉ lệ.
+- Kéo góc trên trái: xoay ảnh (hoặc note) theo góc chuột.
+- Click giữa note: nhập/sửa văn bản bình thường.
+- Nút `×`: xóa sau khi xác nhận hai lần.
+
+Để kiểm thử bản sửa từ PR vào `dev`:
 ```bash
 git fetch origin
-git switch --track origin/feat/phase3-image-notes-core
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-systemctl --user stop evidence-note-board.service
-bash scripts/install-backend-dev.sh
-bash scripts/install-dev.sh
-# Đăng xuất/đăng nhập GNOME Wayland để nạp lại extension
-gnome-extensions enable evidence-note-board@mujin0422.github.io
+git switch --track origin/fix/phase3-border-gestures-image-aspect
+bash scripts/setup-dev.sh
 ```
 
-Không xóa cơ sở dữ liệu khi nâng cấp.
-
-## Phase 3: thao tác ảnh và kích thước note
-
-Kéo `↘` trong thanh ảnh để tăng/giảm kích thước mà vẫn giữ tỉ lệ;
-`↶/↷` xoay 15°, `⧉` tạo bản sao ảnh độc lập. Với giấy chữ, kéo
-`↔` để điều chỉnh **chiều ngang**; chiều dọc tự thay đổi theo nội
-dung, không bao giờ nhỏ hơn chiều cao mặc định.
-
-Để **thả file từ Nautilus**, nhấn `⇩ THẢ ẢNH` rồi kéo các ảnh
-PNG/JPEG/WebP vào cửa sổ GTK nhỏ xuất hiện. Đây là cửa sổ drop target
-GTK4 riêng, **chưa phải** thả trực tiếp lên wallpaper. Cài
-`sudo dnf install gtk4 python3-gobject zenity` nếu thiếu dependency.
-
-Bản này cần cập nhật cả Rust backend bằng `bash scripts/setup-dev.sh`.
-Không xóa database.
+Đăng xuất và đăng nhập lại GNOME Classic Wayland sau khi cập nhật
+extension. SQLite schema không đổi; không xóa database/ảnh cũ.
+Xem [PHASE_03](docs/phases/PHASE_03.md) để nghiệm thu.

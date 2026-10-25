@@ -11,7 +11,7 @@ import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
 import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
-import {resizedTextWidth, resizedImage, requiredPaperHeight, rotateBy} from './geometry.js';
+import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
@@ -23,8 +23,6 @@ export class BoardView {
         this._createButton = null;
         this._imageButton = null;
         this._imagePicker = null;
-        this._dropButton = null;
-        this._dropProcess = null;
         this._resizeSession = null;
         this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
@@ -99,15 +97,6 @@ export class BoardView {
         this._imageButton.connect('clicked', () => this._chooseImage());
         this._root.add_child(this._imageButton);
 
-        this._dropButton = new St.Button({
-            label: '⇩ THẢ ẢNH',
-            reactive: true,
-            can_focus: true,
-            style_class: 'evidence-create-button evidence-image-button',
-        });
-        this._dropButton.set_position(244, 98);
-        this._dropButton.connect('clicked', () => this._openDropWindow());
-        this._root.add_child(this._dropButton);
         this._resize();
         this._setStatus('Đang kết nối backend…');
 
@@ -346,124 +335,16 @@ export class BoardView {
         }
     }
 
-    async _openDropWindow() {
-        if (!this._service || !this._alive) {
-            this._setStatus('BACKEND OFFLINE · không thể thả ảnh');
-            return;
-        }
-        if (this._dropProcess)
-            return;
-        const helper = GLib.build_filenamev([
-            GLib.get_user_data_dir(), 'gnome-shell', 'extensions',
-            'evidence-note-board@mujin0422.github.io', 'image-drop-target.py',
-        ]);
-        if (!GLib.file_test(helper, GLib.FileTest.IS_REGULAR)) {
-            this._setStatus('Thiếu image-drop-target.py · cài lại extension');
-            return;
-        }
-        try {
-            const process = Gio.Subprocess.new(
-                ['python3', helper],
-                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
-            );
-            this._dropProcess = process;
-            this._setStatus('Kéo ảnh từ Files vào cửa sổ THẢ ẢNH');
-            const [ok, stdout] = await new Promise((resolve, reject) => {
-                process.communicate_utf8_async(null, null, (proc, result) => {
-                    try {
-                        resolve(proc.communicate_utf8_finish(result));
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            });
-            if (!this._alive || this._dropProcess !== process)
-                return;
-            if (!ok || !process.get_successful() || !stdout.trim())
-                return; // Closing GTK drop window without a file is cancel.
-            const paths = JSON.parse(stdout);
-            if (!Array.isArray(paths) || paths.length === 0)
-                return;
-            const origin = screenToWorld(this._view, {
-                x: this._root.width / 2,
-                y: this._root.height / 2,
-            });
-            let added = 0;
-            for (const path of paths.slice(0, 12)) {
-                if (typeof path !== 'string' || !GLib.path_is_absolute(path))
-                    continue;
-                try {
-                    const image = await this._service.importImage(path,
-                        origin.x + 26 * added, origin.y + 26 * added);
-                    if (!this._alive)
-                        return;
-                    this._renderNote(image);
-                    added++;
-                } catch (error) {
-                    console.warn('Evidence Note Board: dropped image import failed', error.message);
-                }
-            }
-            this._setStatus(`PHASE 3 · đã nhập ${added}/${Math.min(paths.length, 12)} ảnh`);
-        } catch (error) {
-            console.warn('Evidence Note Board: GTK drop window failed', error.message);
-            if (this._alive)
-                this._setStatus('LỖI CỬA SỔ THẢ ẢNH · cài python3-gobject gtk4');
-        } finally {
-            this._dropProcess = null;
-        }
-    }
-
-    _duplicatePhoto(note) {
-        if (!this._service || !this._alive)
-            return;
-        const offset = 30;
-        this._service.duplicateImage(note.id, note.x + offset, note.y + offset)
-            .then(copy => {
-                if (this._alive) {
-                    this._renderNote(copy);
-                    this._setStatus('PHASE 3 · đã nhân bản ảnh');
-                }
-            }).catch(error => {
-                console.warn('Evidence Note Board: duplicate failed', error.message);
-                this._setStatus('LỖI NHÂN BẢN ẢNH · xem journalctl');
-            });
-    }
-
-    _rotatePhoto(note, by) {
-        if (!this._service || !this._alive)
-            return;
-        const before = note.rotation;
-        note.rotation = rotateBy(note.rotation, by);
-        this._applyGeometry(note);
-        this._service.updateGeometry(note.id, note.width, note.height, note.rotation)
-            .catch(error => {
-                note.rotation = before;
-                this._applyGeometry(note);
-                console.warn('Evidence Note Board: rotate failed', error.message);
-                this._saveError();
-            });
-    }
-
-    _startResize(event, note) {
-        if (event.get_button() !== 1 || !this._service || !this._beginGrab())
-            return Clutter.EVENT_PROPAGATE;
-        const [x, y] = event.get_coords();
-        this._resizeSession = {note, startX: x, startWidth: note.width, startHeight: note.height};
-        this._dragPoint = {x, y};
-        return Clutter.EVENT_STOP;
-    }
-
     _applyGeometry(note) {
         const item = this._notes.get(note.id);
         if (!item)
             return;
         item.actor.set_size(note.width, note.height);
+        item.actor.set_pivot_point(0.5, 0.5);
+        item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
         if (note.type === 'image') {
-            item.actor.set_pivot_point(0.5, 0.5);
-            item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
-            item.photo?.set_size(Math.max(60, note.width - 24), Math.max(60, note.height - 48));
-            if (item.photo)
-                item.photo.icon_size = Math.round(Math.max(64, note.width - 24));
+            item.photo?.set_size(Math.max(60, note.width - 24),
+                Math.max(60, note.height - 48));
         } else if (item.body) {
             item.body.set_size(Math.max(120, note.width - 32),
                 Math.max(90, note.height - 85));
@@ -499,14 +380,14 @@ export class BoardView {
         });
         paper.set_size(note.width, note.height);
         paper.set_position(note.x, note.y);
-        const header = new St.BoxLayout({reactive: true, style_class: 'evidence-photo-header'});
-        const handle = new St.Label({
-            text: '● ẢNH',
-            reactive: true,
-            style_class: 'evidence-note-handle',
+        const header = new St.BoxLayout({
+            reactive: true, style_class: 'evidence-photo-header',
         });
-        handle.connect('button-press-event', (_actor, event) => this._startNoteDrag(event, note));
-        header.add_child(handle);
+        // Decorative pin, no visible drag/resize/rotate controls.
+        header.add_child(new St.Label({
+            text: '●', reactive: false, style_class: 'evidence-note-handle',
+        }));
+        header.add_child(new St.Widget({x_expand: true, reactive: false}));
         const remove = new St.Button({label: '×', style_class: 'evidence-delete'});
         remove.connect('clicked', () => {
             if (remove.label !== 'Xóa?') {
@@ -521,29 +402,23 @@ export class BoardView {
             }).catch(() => this._saveError());
         });
         header.add_child(remove);
-        const rotateLeft = new St.Button({label: '↶', style_class: 'evidence-photo-action'});
-        rotateLeft.connect('clicked', () => this._rotatePhoto(note, -15));
-        header.add_child(rotateLeft);
-        const rotateRight = new St.Button({label: '↷', style_class: 'evidence-photo-action'});
-        rotateRight.connect('clicked', () => this._rotatePhoto(note, 15));
-        header.add_child(rotateRight);
-        const duplicate = new St.Button({label: '⧉', style_class: 'evidence-photo-action'});
-        duplicate.connect('clicked', () => this._duplicatePhoto(note));
-        header.add_child(duplicate);
-        const resize = new St.Label({text: '↘', reactive: true, style_class: 'evidence-resize-handle'});
-        resize.connect('button-press-event', (_actor, event) => this._startResize(event, note));
-        header.add_child(resize);
         paper.add_child(header);
-        const photo = new St.Icon({
-            gicon: new Gio.FileIcon({file: Gio.File.new_for_path(note.asset_path)}),
-            icon_size: Math.max(64, Math.round(note.width - 24)),
-            style_class: 'evidence-photo-image',
-            reactive: false,
-        });
-        photo.set_size(note.width - 24, note.height - 48);
+
+        // Icons are square by design. Use an image texture and aspect
+        // gravity instead so wide/tall photographs retain their shape.
+        const texture = St.TextureCache.get_default();
+        const file = Gio.File.new_for_path(note.asset_path);
+        const paintScale = St.ThemeContext.get_for_stage(global.stage).scaleFactor;
+        const photo = texture.load_file_async(file, -1, -1, paintScale, 1.0);
+        photo.set_content_gravity(Clutter.ContentGravity.RESIZE_ASPECT);
+        photo.set_reactive(false);
+        photo.set_size(Math.max(60, note.width - 24),
+            Math.max(60, note.height - 48));
         paper.add_child(photo);
+
         this._notes.set(note.id, {note, actor: paper, photo});
         this._world.add_child(paper);
+        this._connectPaperGestures(paper, note, remove);
         this._applyGeometry(note);
     }
 
@@ -557,9 +432,9 @@ export class BoardView {
             // background click on GNOME Classic. Decide from screen/world
             // geometry instead; don't intercept clicks inside note editors.
             const uiRects = [
-                {x: 0, y: 0, width: 600, height: 145},
+                {x: 0, y: 0, width: 420, height: 145},
             ];
-            for (const actor of [this._hud, this._createButton, this._imageButton, this._dropButton]) {
+            for (const actor of [this._hud, this._createButton, this._imageButton]) {
                 if (!actor)
                     continue;
                 const [ax, ay] = actor.get_position();
@@ -610,13 +485,65 @@ export class BoardView {
         return Clutter.EVENT_STOP;
     }
 
+    _startPaperGesture(event, note, paper) {
+        if (event.get_button() !== 1 || !this._service)
+            return Clutter.EVENT_PROPAGATE;
+        const [x, y] = event.get_coords();
+        // The local point respects canvas zoom/pan and actor rotation.
+        const [ok, lx, ly] = paper.transform_stage_point(x, y);
+        if (!ok)
+            return Clutter.EVENT_PROPAGATE;
+        const kind = gestureAt(lx, ly, note.width, note.height, note.type, this._view.zoom);
+        if (kind === 'edit')
+            return Clutter.EVENT_PROPAGATE;
+        if (kind === 'drag')
+            return this._startNoteDrag(event, note);
+        if (!this._beginGrab())
+            return Clutter.EVENT_PROPAGATE;
+        this._dragPoint = {x, y};
+        this._resizeSession = {
+            kind, note, startX: x, startWidth: note.width,
+            startHeight: note.height, startRotation: note.rotation,
+            startAngle: pointerAngle(x, y, note, this._view),
+        };
+        return Clutter.EVENT_STOP;
+    }
+
+    _connectPaperGestures(paper, note, removeButton) {
+        paper.connect('button-press-event', (_actor, event) => {
+            if (event.get_source() === removeButton)
+                return Clutter.EVENT_PROPAGATE;
+            const result = this._startPaperGesture(event, note, paper);
+            if (result === Clutter.EVENT_STOP)
+                return result;
+            // Clicking blank inner paper should still focus the editor.
+            if (event.get_button() === 1 && event.get_source() === paper &&
+                note.type === 'text') {
+                const body = this._notes.get(note.id)?.body;
+                if (body) {
+                    global.stage.set_key_focus(body);
+                    body.set_cursor_position(-1);
+                }
+            }
+            // Child Clutter.Text handles its own cursor. Do not let
+            // note clicks reach the blank-board double-click recognizer.
+            return event.get_button() === 1
+                ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
+        });
+    }
+
     _motion(event) {
         if (!this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
         const [x, y] = event.get_coords();
         if (this._resizeSession) {
-            const {note, startX, startWidth, startHeight} = this._resizeSession;
-            if (note.type === 'image') {
+            const session = this._resizeSession;
+            const {note, kind, startX, startWidth, startHeight} = session;
+            if (kind === 'rotate') {
+                const nextAngle = pointerAngle(x, y, note, this._view);
+                note.rotation = normalizeAngle(session.startRotation +
+                    angleDelta(session.startAngle, nextAngle));
+            } else if (note.type === 'image') {
                 const size = resizedImage(startWidth, startHeight,
                     x - startX, this._view.zoom);
                 note.width = size.width;
@@ -626,7 +553,7 @@ export class BoardView {
                     x - startX, this._view.zoom);
             }
             this._applyGeometry(note);
-            if (note.type === 'text')
+            if (note.type === 'text' && kind !== 'rotate')
                 this._syncTextHeight(note);
             return Clutter.EVENT_STOP;
         }
@@ -696,14 +623,10 @@ export class BoardView {
             reactive: true,
             style_class: 'evidence-note-header',
         });
-        const handle = new St.Label({
-            text: '●  KÉO ĐỂ DI CHUYỂN',
-            reactive: true,
-            style_class: 'evidence-note-handle',
-        });
-        handle.connect('button-press-event',
-            (_actor, event) => this._startNoteDrag(event, note));
-        bar.add_child(handle);
+        bar.add_child(new St.Label({
+            text: '●', reactive: false, style_class: 'evidence-note-handle',
+        }));
+        bar.add_child(new St.Widget({x_expand: true, reactive: false}));
 
         const remove = new St.Button({
             label: '×',
@@ -723,11 +646,6 @@ export class BoardView {
             }).catch(() => this._saveError());
         });
         bar.add_child(remove);
-        const resize = new St.Label({
-            text: '↔', reactive: true, style_class: 'evidence-resize-handle',
-        });
-        resize.connect('button-press-event', (_actor, event) => this._startResize(event, note));
-        bar.add_child(resize);
         paper.add_child(bar);
 
         // One editable multiline field directly on the paper: no St.Entry,
@@ -757,15 +675,8 @@ export class BoardView {
             return Clutter.EVENT_PROPAGATE;
         });
         paper.add_child(body);
-        // Clicking unoccupied paper padding should also focus the editor.
-        paper.connect('button-press-event', (_actor, event) => {
-            if (event.get_button() === 1 && event.get_source() === paper) {
-                global.stage.set_key_focus(body);
-                body.set_cursor_position(-1);
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
-        });
+        // Border gestures do not interfere with the multiline editor.
+        this._connectPaperGestures(paper, note, remove);
 
         body.connect('notify::text', () => {
             this._syncTextHeight(note);
@@ -773,6 +684,7 @@ export class BoardView {
         });
         this._notes.set(note.id, {note, actor: paper, body});
         this._world.add_child(paper);
+        this._applyGeometry(note);
         // Measure after allocation; Pango may not know the final width
         // immediately when an actor is first placed on the board.
         GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -837,8 +749,6 @@ export class BoardView {
         }
         this._imagePicker?.force_exit();
         this._imagePicker = null;
-        this._dropProcess?.force_exit();
-        this._dropProcess = null;
         this._doubleClick.reset();
         this._endDrag();
         for (const id of [...this._timers.keys()])
@@ -865,6 +775,7 @@ export class BoardView {
         this._world = null;
         this._hud = null;
         this._createButton = null;
+        this._imageButton = null;
         this._service = null;
         this._backgroundGroup = null;
     }

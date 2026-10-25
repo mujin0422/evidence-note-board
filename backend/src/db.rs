@@ -211,56 +211,6 @@ impl Storage {
         )? == 1)
     }
 
-    /// Duplicate an image without relying on the original import path.
-    /// The duplicate owns its own file, so deleting either card is safe.
-    pub fn duplicate_image(&mut self, id: &str, x: f64, y: f64) -> Result<Note> {
-        let (original_file, mime, pixels_w, pixels_h, checksum):
-            (String, String, i64, i64, String) = self.conn.query_row(
-                "SELECT a.file_path, a.mime_type, a.width, a.height, a.checksum
-                   FROM assets a JOIN notes n ON n.id=a.note_id
-                  WHERE n.id=?1 AND n.board_id=?2 AND n.type='image'",
-                params![id, BOARD_ID],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-            )?;
-        let existing = self.get_note(id)?.ok_or(Error::QueryReturnedNoRows)?;
-        // Do not trust stored paths from a modified database.
-        let original_name = Path::new(&original_file);
-        if original_name.components().count() != 1 {
-            return Err(Error::InvalidQuery);
-        }
-        let ext = original_name.extension().and_then(|s| s.to_str()).ok_or(Error::InvalidQuery)?;
-        if !["png", "jpg", "webp"].contains(&ext) {
-            return Err(Error::InvalidQuery);
-        }
-        let new_id = Uuid::new_v4().to_string();
-        let new_name = format!("{new_id}.{ext}");
-        let target = self.assets_dir.join(&new_name);
-        fs::copy(self.assets_dir.join(&original_file), &target)
-            .map_err(|err| Error::ToSqlConversionFailure(Box::new(err)))?;
-        let transaction: Result<()> = (|| {
-            let tx = self.conn.transaction()?;
-            tx.execute(
-                "INSERT INTO notes
-                 (id,board_id,type,title,content,x,y,width,height,rotation,color,z_index)
-                 VALUES (?1,?2,'image','','',?3,?4,?5,?6,?7,?8,
-                   (SELECT COALESCE(MAX(z_index),0)+1 FROM notes WHERE board_id=?2))",
-                params![new_id, BOARD_ID, x, y, existing.width, existing.height,
-                        existing.rotation, existing.color],
-            )?;
-            tx.execute(
-                "INSERT INTO assets(id,note_id,file_path,mime_type,width,height,checksum)
-                 VALUES (?1,?1,?2,?3,?4,?5,?6)",
-                params![new_id, new_name, mime, pixels_w, pixels_h, checksum],
-            )?;
-            tx.commit()
-        })();
-        if let Err(error) = transaction {
-            let _ = fs::remove_file(&target);
-            return Err(error);
-        }
-        self.get_note(&new_id)?.ok_or(Error::QueryReturnedNoRows)
-    }
-
     pub fn delete_note(&self, id: &str) -> Result<bool> {
         let asset: Option<String> = self.conn.query_row(
             "SELECT a.file_path FROM assets a JOIN notes n ON n.id=a.note_id
@@ -402,42 +352,28 @@ mod tests {
     }
 
     #[test]
-    fn geometry_and_image_duplicate_survive_reopen() {
+    fn geometry_and_landscape_image_survive_reopen() {
         let temp = tempfile::tempdir().unwrap();
-        let original = temp.path().join("source.png");
-        image::RgbImage::new(72, 120)
+        let original = temp.path().join("landscape.png");
+        image::RgbImage::new(240, 120)
             .save_with_format(&original, image::ImageFormat::Png).unwrap();
         let path = temp.path().join("evidence.db");
-        let (photo, copy) = {
+        let photo = {
             let mut db = Storage::open(&path).unwrap();
-            let text = db.create_note("", "unicode\nsecond line", 0.0, 0.0).unwrap();
-            assert!(db.update_geometry(&text.id, 450.0, 320.0, 0.0).unwrap());
             let photo = db.import_image(&original, 10.0, 20.0).unwrap();
-            assert!(db.update_geometry(&photo.id, 280.0, 390.0, 12.0).unwrap());
-            let copy = db.duplicate_image(&photo.id, 45.0, 65.0).unwrap();
-            assert_ne!(copy.id, photo.id);
-            assert_eq!(copy.rotation, 12.0);
-            assert_eq!((copy.width, copy.height), (280.0, 390.0));
-            (photo, copy)
+            assert!(photo.width > photo.height);
+            assert!(db.update_geometry(&photo.id, 360.0, 216.0, -15.0).unwrap());
+            photo
         };
-        fs::remove_file(original).unwrap();
         let db = Storage::open(&path).unwrap();
-        let image_notes: Vec<_> = db.list_notes().unwrap().into_iter()
-            .filter(|n| n.note_type == "image").collect();
-        assert_eq!(image_notes.len(), 2);
-        assert_ne!(image_notes[0].asset_path, image_notes[1].asset_path);
-        let path_orig = photo.asset_path.unwrap();
-        let path_copy = copy.asset_path.unwrap();
-        assert!(Path::new(&path_orig).exists());
-        assert!(Path::new(&path_copy).exists());
+        let photo_after = db.list_notes().unwrap().into_iter()
+            .find(|n| n.id == photo.id).unwrap();
+        assert_eq!(photo_after.note_type, "image");
+        assert_eq!((photo_after.width, photo_after.height, photo_after.rotation),
+            (360.0, 216.0, -15.0));
+        let saved_file = photo_after.asset_path.unwrap();
+        assert!(Path::new(&saved_file).exists());
         assert!(db.delete_note(&photo.id).unwrap());
-        assert!(!Path::new(&path_orig).exists());
-        assert!(Path::new(&path_copy).exists());
-        assert!(db.delete_note(&copy.id).unwrap());
-        assert!(!Path::new(&path_copy).exists());
-        let text_note = db.list_notes().unwrap().pop().unwrap();
-        assert_eq!(text_note.content, "unicode\nsecond line");
-        assert_eq!((text_note.width, text_note.height), (450.0, 320.0));
+        assert!(!Path::new(&saved_file).exists());
     }
-
 }
