@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
@@ -114,9 +115,21 @@ export class BoardView {
             this._view = {zoom: view.zoom, panX: view.pan_x, panY: view.pan_y};
         }
         this._applyView();
-        for (const note of notes)
-            this._renderNote(note);
-        this._setStatus('SẴN SÀNG · double-click: thêm note · kéo tiêu đề: di chuyển');
+        let restored = 0;
+        let failed = 0;
+        for (const note of notes) {
+            try {
+                this._renderNote(note);
+                restored++;
+            } catch (error) {
+                failed++;
+                console.error(error, 'Evidence Note Board: failed to render saved note');
+            }
+        }
+        if (failed)
+            this._setStatus(`LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`);
+        else
+            this._setStatus(`P2.1 · SẴN SÀNG · ${restored} ghi chú · double-click hoặc + GHI CHÚ`);
     }
 
     _setStatus(message) {
@@ -201,12 +214,20 @@ export class BoardView {
             .then(note => {
                 if (!this._alive)
                     return;
-                this._renderNote(note);
-                this._setStatus('ĐÃ TẠO GHI CHÚ · click để chỉnh sửa');
+                // Persistence is already committed. A render error must never
+                // be reported as a failed save (otherwise users create
+                // multiple invisible records by retrying).
+                try {
+                    this._renderNote(note);
+                    this._setStatus('P2.1 · ĐÃ LƯU & HIỂN THỊ GHI CHÚ');
+                } catch (error) {
+                    console.error(error, 'Evidence Note Board: saved note but rendering failed');
+                    this._setStatus('ĐÃ LƯU NHƯNG LỖI HIỂN THỊ · xem journalctl');
+                }
             })
             .catch(error => {
-                console.warn('Evidence Note Board: create note failed', error.message);
-                this._saveError();
+                console.warn('Evidence Note Board: create note D-Bus failed', error.message);
+                this._setStatus('LỖI TẠO GHI CHÚ QUA D-BUS · xem journalctl');
             });
     }
 
@@ -346,14 +367,20 @@ export class BoardView {
         paper.add_child(title);
 
         // Clutter.Text supports multiline Unicode editing in GNOME Shell.
+        // Clutter.Color was removed in Mutter/GNOME 47. GNOME 50
+        // Clutter.Text color is a Cogl.Color boxed value.
+        // Build the editor before attaching it to the scene graph.
+        const ink = new Cogl.Color();
+        ink.init_from_4f(81 / 255, 72 / 255, 55 / 255, 1.0);
         const body = new Clutter.Text({
             text: note.content,
+            reactive: true,
             editable: true,
             selectable: true,
             single_line_mode: false,
             line_wrap: true,
             line_wrap_mode: Pango.WrapMode.WORD_CHAR,
-            color: new Clutter.Color({red: 81, green: 72, blue: 55, alpha: 255}),
+            color: ink,
         });
         body.set_size(228, 88);
         paper.add_child(body);

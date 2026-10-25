@@ -73,3 +73,18 @@ Xem [TESTING](docs/TESTING.md) và [Phase 2 test checklist](docs/phases/PHASE_02
 Nếu board hiện lên nhưng double-click không tạo được note, hãy dùng bản sửa `fix/phase2-double-click-create-note`. Bản sửa loại bỏ lời gọi `event.get_click_count()` không có trong Clutter.Event hiện đại, theo dõi hai lần nhấn chuột bằng timestamp/tọa độ, đồng thời thêm nút `+ GHI CHÚ` ở góc trái để thử tạo note trực tiếp. Ở zoom 25%, note mặc định sẽ trông rất nhỏ; zoom lên 100% để đọc.
 
 Sau khi cập nhật extension, hãy đăng xuất/đăng nhập vào phiên Wayland để nạp lại mã trước khi kiểm tra. Backend Rust hiện tại không phải thay đổi cho lỗi này. Xem [Phase 02](docs/phases/PHASE_02.md).
+
+## Bản sửa P2.1 — tạo note nhưng không xuất hiện trên GNOME 50
+
+Mã cũ dùng `new Clutter.Color` trong text editor; GNOME 50 yêu cầu `Cogl.Color`. Bản sửa bổ sung status `P2.1`, phân biệt **đã lưu vào SQLite nhưng lỗi render** và lỗi D-Bus. Nếu bạn từng thử tạo ghi chú mà màn hình trống, có thể bản ghi đã nằm trong SQLite và sẽ xuất hiện sau khi cài extension đã sửa.
+
+```bash
+git fetch origin
+git switch --track origin/fix/phase2-gnome50-note-rendering
+gnome-extensions disable evidence-note-board@mujin0422.github.io
+bash scripts/install-dev.sh
+# Đăng xuất rồi đăng nhập lại trên GNOME Wayland trước khi bật:
+gnome-extensions enable evidence-note-board@mujin0422.github.io
+```
+
+Xem [kiểm thử và phục hồi](docs/phases/PHASE_02.md) để kiểm tra dữ liệu bằng D-Bus, journal logs và xem trạng thái trên HUD.

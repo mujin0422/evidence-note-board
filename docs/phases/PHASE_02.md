@@ -70,3 +70,22 @@
 - [ ] Thử ở 25%, 100%, 300% và kiểm tra hiển thị của note.
 
 **Kết luận:** Đã sửa mã và thêm unit test; chưa đánh dấu đã PASS khi chưa kiểm tra lại desktop trên máy người dùng.
+
+## Sửa lỗi P2.1 — lưu thành công nhưng không thấy note (GNOME Classic 50.5)
+
+**Báo cáo:** người dùng không thể thấy ghi chú mới cả khi nhấp đúp lẫn nhấn nút `+ GHI CHÚ`. Backend `evidence-note-board.service` đã báo `active (running)`. Log được lọc theo tên extension chỉ cho thấy stack trace cũ `_press(...):179`, không bao gồm dòng thông báo lỗi (do `grep` loại bỏ ngữ cảnh).
+
+**Lỗi mã nguồn cụ thể:** `_renderNote()` dựng một `Clutter.Text` với `new Clutter.Color(...)`. Mutter đã loại bỏ `Clutter.Color` từ GNOME 47, thay bằng `Cogl.Color`. Trên GNOME 50, đây là rủi ro lỗi runtime khi backend đã tạo note thành công, khiến ứng dụng ghi sai trạng thái `LỖI LƯU`. Tài liệu API: https://gnome.pages.gitlab.gnome.org/mutter/clutter/property.Text.color.html.
+
+**Bản sửa:** dùng `Cogl.Color.init_from_4f`, bật `reactive` cho editor; tách riêng lỗi D-Bus trước khi lưu và lỗi render sau khi đã lưu; tiếp tục restore các note khác nếu một card render lỗi. HUD có dấu `P2.1` để dễ nhận biết phiên bản mới, metadata extension version 3. Thêm static regression test `tests/check_gnome50_api.py`.
+
+**Bắt buộc kiểm tra trên Fedora GNOME Classic 50.5:**
+
+1. Đồng bộ branch/PR, disable extension, chạy lại `scripts/install-dev.sh`, **đăng xuất và đăng nhập** (Wayland không đảm bảo ES modules được nạp lại chỉ bằng disable/enable). Sau đó `gnome-extensions enable ...`.
+2. Xác nhận HUD hiển thị `P2.1` và `gnome-extensions info` hiển thị phiên bản mới; nếu vẫn thấy dấu stack `_press:179` từ phiên cũ, kiểm tra timestamp các log.
+3. Chạy `busctl --user call io.github.mujin0422.EvidenceNoteBoard /io/github/mujin0422/EvidenceNoteBoard io.github.mujin0422.EvidenceNoteBoard ListNotes` để kiểm tra database có note từ những lần thử trước.
+4. Nhấn `+ GHI CHÚ`, xác minh hiện note vàng và nhập được text; nhấp đúp vùng trống để thêm note thứ hai.
+5. Lưu note, disable/re-enable rồi đăng nhập lại, kiểm tra nội dung vẫn tồn tại.
+6. Nếu lỗi, dùng `journalctl --user -b -o cat --no-pager | grep -B 4 -A 7 -E 'Evidence Note Board|boardView.js|TypeError|Gjs-CRITICAL'` để lấy **thông báo lỗi và stack**, thay vì chỉ grep tên extension.
+
+**Trạng thái:** bản sửa được bổ sung vào source/CI; nghiệm thu desktop thật còn chờ phản hồi của người kiểm thử. Không đóng Phase 2 khi chưa PASS.
