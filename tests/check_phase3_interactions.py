@@ -18,7 +18,7 @@ for fragment in (
     "angleDelta(", "normalizeAngle(", "get_pixel_size()",
     "resizedImage(", "resizedTextWidth(", "_connectPaperGestures(",
     "updateGeometry(", "Clutter.RotateAxis.Z_AXIS",
-    "St.TextureCache.get_default().load_file_async(",
+    "St.TextureCache.get_default()", "texture.load_file_async(",
     "Clutter.ContentGravity.RESIZE_ASPECT",
 ):
     assert fragment in js, fragment
