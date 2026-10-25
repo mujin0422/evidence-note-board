@@ -110,3 +110,12 @@ nghiệm thu GNOME Shell thật sau khi cập nhật extension.
 trên, giữ đúng khi resize/xoay. `python3 tests/check_phase4_pin.py`:
 tránh còn nút ×, xác nhận 2 bước, nhấn phải mở menu, pin riêng và kiểm
 tra đóng gói. Cần kiểm nghiệm trực tiếp GNOME Classic 50.5 Wayland.
+
+## Phase 4.2
+
+`tests/stringMath.test.js` kiểm tra menu 5 px, world→screen, dây
+đi theo pin xoay và bắt pin đích ở các mức zoom.
+`tests/check_phase4_strings.py` đảm bảo stage capture nhận release,
+dữ liệu D-Bus CRUD, St.DrawingArea với cairo dispose và đóng gói.
+Rust tests xác minh backfill, idempotent, cascade, restart persistence.
+Cần kiểm thử trực tiếp GNOME Classic 50.5/Wayland.
