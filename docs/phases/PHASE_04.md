@@ -53,3 +53,51 @@ bash scripts/setup-dev.sh
 - [ ] Kiểm thử nhiều liên kết (graph) và lỗi khôi phục.
 
 **Không đóng toàn Phase 4** chỉ vì pin đã chạy hoặc CI xanh.
+
+## Phase 4.2 — Fix pin drag, screen-menu & Red Strings
+
+Đã triển khai trên branch `feat/phase4-pin-drag-red-strings`:
+
+1. **Fix pin dính chuột:** pin không gọi `global.stage.grab()`
+   nữa; stage `captured-event` bắt phím nhả **trước** khi pin chặn
+   sự kiện. Chỉ cập nhật tọa độ khi giữ BUTTON1_MASK. Khi nhả,
+   kết thúc kéo và persist MoveNote. Nếu nhả ngoài desktop,
+   lần motion kế tiếp thiếu BUTTON1_MASK cũng tự kết thúc.
+2. **Context menu sát pin:** menu nằm trong `_root` ở hệ tọa độ
+   màn hình, neo dưới pin cách đúng **5 pixel màn hình** ở 25–300% zoom;
+   có xử lý tránh tràn mép dưới/phải.
+3. **Red string:** tạo `St.DrawingArea` Cairo phía sau note,
+   đường Bézier đỏ với đường viền bóng tối; cập nhật vị trí theo
+   pin khi kéo note, resize/rotate, pan/zoom.
+4. **Nối dây:** giữ **Shift rồi nhấn ghim A**, rê con trỏ sang
+   ghim B rồi **thả chuột trái lên ghim B**; hoặc Shift-click A,
+   sau đó click ghim B. Preview dây đỏ đi theo trỏ chuột.
+   Nhấn `Esc` để hủy kéo dây.
+5. **Tháo dây:** chuột phải ghim A, chọn `Tháo dây đỏ #N` trong
+   menu (mỗi lần tối đa 6 dây được liệt kê); không xóa note.
+6. **SQLite:** tận dụng `pins`/`connections` trong schema v1.
+   Khởi động backend tự backfill pin cho note cũ; mỗi note mới
+   có pin DB; CREATE idempotent với hai chiều A→B/B→A;
+   DELETE note tự xóa dây liên quan theo CASCADE.
+   D-Bus mới: `ListConnections`, `CreateConnection`,
+   `DeleteConnection`. Không nâng user_version hay xóa data.
+
+### Kiểm thử người dùng trên Fedora Wayland
+
+- [ ] Click pin không di chuyển note; giữ chuột trái và kéo mới di chuyển;
+  nhả chuột ngay giữa pin hoặc ra ngoài pin phải dừng tức thì
+- [ ] Không còn pin dính theo con trỏ sau khi thả; kiểm tra zoom 25%, 100%
+- [ ] Nhấp phải pin menu cách pin khoảng 5 pixel màn hình ở 25%, 100%, 300%
+- [ ] Xóa note qua menu 2 bước; bấm Hủy không xóa, ảnh xóa asset
+- [ ] Shift kéo từ pin A đến B, có preview đỏ; nhả lên B tạo một dây
+- [ ] Shift-click A rồi click pin B cũng tạo dây; dây A–B không trùng B–A
+- [ ] Nhấn Esc trong lúc chọn đầu dây, preview biến mất
+- [ ] Di chuyển, resize, rotate A/B, dây đi theo hai đầu pin
+- [ ] Tháo một dây đỏ từ menu, hai note vẫn còn
+- [ ] Xóa note nối nhiều dây, các dây liên quan biến mất
+- [ ] Logout/login: mọi dây, note, ảnh và vị trí được khôi phục
+- [ ] Ctrl+Wheel zoom, pan, text multiline không regress
+- [ ] Không có JS ERROR hoặc Gjs-CRITICAL trong journal
+
+**CI Node/Rust chỉ xác minh logic toán, DB, D-Bus và nguồn code;
+chưa nghiệm thu GNOME compositor.**

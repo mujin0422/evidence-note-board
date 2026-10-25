@@ -12,7 +12,5 @@ export function pinPosition(note, size = PIN_SIZE) {
     };
 }
 
-export function pinMenuPosition(note) {
-    const pin = pinPosition(note);
-    return {x: Math.max(0, pin.x - 45), y: Math.max(0, pin.y + PIN_SIZE)};
-}
+// Menu is now anchored in screen space by stringMath.menuNearPin(), rather
+// than scaled world space: always a 5px gap regardless of zoom.

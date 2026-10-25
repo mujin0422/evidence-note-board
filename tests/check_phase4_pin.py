@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 js = (ROOT / "extension/boardView.js").read_text(encoding="utf-8")
 css = (ROOT / "extension/stylesheet.css").read_text(encoding="utf-8")
-assert "import {PIN_SIZE, pinPosition, pinMenuPosition}" in js
+assert "import {PIN_SIZE, pinPosition}" in js
 assert "_installPin(note)" in js
 assert "_togglePinMenu(note)" in js
 assert "_deletePinnedNote(note)" in js

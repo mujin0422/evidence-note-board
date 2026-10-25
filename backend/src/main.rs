@@ -106,6 +106,31 @@ impl NoteApi {
         Ok(())
     }
 
+    fn list_connections(&self) -> zbus::fdo::Result<String> {
+        let edges = self.with_db(|db| db.list_connections())?;
+        serde_json::to_string(&edges)
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn create_connection(&self, source_note_id: &str, target_note_id: &str)
+        -> zbus::fdo::Result<String> {
+        if source_note_id == target_note_id ||
+            source_note_id.len() > 80 || target_note_id.len() > 80 {
+            return Err(zbus::fdo::Error::InvalidArgs("Choose two distinct notes".into()));
+        }
+        let edge = self.with_db(|db|
+            db.create_connection(source_note_id, target_note_id))?;
+        serde_json::to_string(&edge)
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn delete_connection(&self, id: &str) -> zbus::fdo::Result<()> {
+        if !self.with_db(|db| db.delete_connection(id))? {
+            return Err(zbus::fdo::Error::Failed("Connection not found".into()));
+        }
+        Ok(())
+    }
+
     fn delete_note(&self, id: &str) -> zbus::fdo::Result<()> {
         if !self.with_db(|db| db.delete_note(id))? {
             return Err(zbus::fdo::Error::Failed("Note not found".into()));

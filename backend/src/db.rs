@@ -27,6 +27,14 @@ pub struct Note {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ConnectionEdge {
+    pub id: String,
+    pub source_note_id: String,
+    pub target_note_id: String,
+    pub color: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct View {
     pub zoom: f64,
     pub pan_x: f64,
@@ -69,6 +77,15 @@ impl Storage {
         )?;
         conn.execute(
             "INSERT OR IGNORE INTO board_view_state (board_id) VALUES (?1)",
+            [BOARD_ID],
+        )?;
+        // Backfill Phase-4 pins for every existing Phase-2/3 note without
+        // changing schema/user_version or destroying existing pins/strings.
+        conn.execute(
+            "INSERT INTO pins (id, note_id, local_x, local_y, style)
+             SELECT n.id, n.id, n.width / 2.0, 0, 'red'
+             FROM notes n WHERE n.board_id=?1
+             AND NOT EXISTS (SELECT 1 FROM pins p WHERE p.note_id=n.id)",
             [BOARD_ID],
         )?;
         Ok(Self { conn, assets_dir })
@@ -117,6 +134,10 @@ impl Storage {
              VALUES (?1, ?2, 'text', ?3, ?4, ?5, ?6, 270, 185, 0, '#E9D898',
                 (SELECT COALESCE(MAX(z_index), 0) + 1 FROM notes WHERE board_id = ?2))",
             params![id, BOARD_ID, title, content, x, y],
+        )?;
+        self.conn.execute(
+            "INSERT INTO pins (id, note_id, local_x, local_y) VALUES (?1, ?1, 135, 0)",
+            [&id],
         )?;
         self.get_note(&id)?.ok_or(Error::QueryReturnedNoRows)
     }
@@ -171,6 +192,10 @@ impl Storage {
                 params![id, BOARD_ID, x, y, visual_width, visual_height],
             )?;
             tx.execute(
+                "INSERT INTO pins (id, note_id, local_x, local_y) VALUES (?1, ?1, ?2, 0)",
+                params![id, visual_width / 2.0],
+            )?;
+            tx.execute(
                 "INSERT INTO assets(id, note_id, file_path, mime_type, width, height, checksum)
                  VALUES (?1, ?1, ?2, ?3, ?4, ?5, ?6)",
                 params![id, file_name, data.mime,
@@ -208,6 +233,70 @@ impl Storage {
             "UPDATE notes SET width=?1, height=?2, rotation=?3, updated_at=unixepoch()
              WHERE id=?4 AND board_id=?5",
             params![width, height, rotation, id, BOARD_ID],
+        )? == 1)
+    }
+
+    /// Red strings are edges between stable pin IDs, resolved from note IDs.
+    /// SQLite foreign keys cascade when either note/pin is removed.
+    pub fn list_connections(&self) -> Result<Vec<ConnectionEdge>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, s.note_id, t.note_id, c.color
+             FROM connections c
+             JOIN pins s ON s.id=c.source_pin_id
+             JOIN pins t ON t.id=c.target_pin_id
+             JOIN notes ns ON ns.id=s.note_id AND ns.board_id=?1
+             JOIN notes nt ON nt.id=t.note_id AND nt.board_id=?1
+             ORDER BY c.created_at, c.id",
+        )?;
+        let rows = stmt.query_map([BOARD_ID], |row| Ok(ConnectionEdge {
+            id: row.get(0)?,
+            source_note_id: row.get(1)?,
+            target_note_id: row.get(2)?,
+            color: row.get(3)?,
+        }))?;
+        rows.collect()
+    }
+
+    pub fn create_connection(&mut self, source: &str, target: &str) -> Result<ConnectionEdge> {
+        if source == target { return Err(Error::InvalidQuery); }
+        let resolve_pin = |db: &Connection, note: &str| -> Result<String> {
+            db.query_row(
+                "SELECT p.id FROM pins p JOIN notes n ON n.id=p.note_id
+                 WHERE p.note_id=?1 AND n.board_id=?2 ORDER BY p.rowid LIMIT 1",
+                params![note, BOARD_ID], |row| row.get(0))
+        };
+        let source_pin = resolve_pin(&self.conn, source)?;
+        let target_pin = resolve_pin(&self.conn, target)?;
+        // Idempotent unordered pair (A-B == B-A): repeated click
+        // does not create visually stacked duplicate strings.
+        let existing: Option<String> = self.conn.query_row(
+            "SELECT id FROM connections WHERE
+             (source_pin_id=?1 AND target_pin_id=?2) OR
+             (source_pin_id=?2 AND target_pin_id=?1) LIMIT 1",
+            params![source_pin, target_pin], |row| row.get(0)
+        ).optional()?;
+        if let Some(id) = existing {
+            return self.list_connections()?.into_iter()
+                .find(|edge| edge.id==id).ok_or(Error::QueryReturnedNoRows);
+        }
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO connections (id,source_pin_id,target_pin_id,color,style)
+             VALUES (?1,?2,?3,'#A32626','string')",
+            params![id, source_pin, target_pin],
+        )?;
+        Ok(ConnectionEdge {
+            id, source_note_id: source.to_owned(), target_note_id: target.to_owned(),
+            color: "#A32626".to_string(),
+        })
+    }
+
+    pub fn delete_connection(&self, id: &str) -> Result<bool> {
+        Ok(self.conn.execute(
+            "DELETE FROM connections WHERE id=?1 AND EXISTS (
+                 SELECT 1 FROM pins a JOIN notes n ON n.id=a.note_id
+                 WHERE a.id=connections.source_pin_id AND n.board_id=?2)",
+            params![id, BOARD_ID],
         )? == 1)
     }
 
@@ -376,4 +465,50 @@ mod tests {
         assert!(db.delete_note(&photo.id).unwrap());
         assert!(!Path::new(&saved_file).exists());
     }
+    #[test]
+    fn strings_persist_backfill_and_cascade_with_deleted_notes() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("board.db");
+        let (a, b, edge_id) = {
+            let mut db = Storage::open(&path).unwrap();
+            let a = db.create_note("", "Note A", 0.0, 0.0).unwrap().id;
+            let b = db.create_note("", "Note B", 200.0, 150.0).unwrap().id;
+            assert!(db.create_connection(&a, &a).is_err());
+            assert!(db.create_connection(&a, "nonexistent").is_err());
+            let edge = db.create_connection(&a, &b).unwrap();
+            assert_eq!(db.create_connection(&b, &a).unwrap().id, edge.id);
+            assert_eq!(db.list_connections().unwrap().len(), 1);
+            (a, b, edge.id)
+        };
+        let mut db = Storage::open(&path).unwrap();
+        let edge = db.list_connections().unwrap().pop().unwrap();
+        assert_eq!(edge.id, edge_id);
+        assert_eq!(edge.source_note_id, a);
+        assert_eq!(edge.target_note_id, b);
+        assert!(db.delete_connection(&edge.id).unwrap());
+        assert!(db.list_connections().unwrap().is_empty());
+        let created = db.create_connection(&a, &b).unwrap();
+        assert!(db.delete_note(&a).unwrap());
+        assert!(db.list_connections().unwrap().is_empty());
+        assert!(!db.delete_connection(&created.id).unwrap());
+        assert_eq!(db.list_notes().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn prior_phase_note_without_pin_is_backfilled_without_schema_change() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("existing.db");
+        {
+            let db = Storage::open(&path).unwrap();
+            let n = db.create_note("", "from P2", 0.0, 0.0).unwrap();
+            db.conn.execute("DELETE FROM pins WHERE note_id=?1", [&n.id]).unwrap();
+        }
+        let db = Storage::open(&path).unwrap();
+        let count: i64 = db.conn.query_row(
+            "SELECT count(*) FROM pins", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+        let version: i64 = db.conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        assert_eq!(version, 1);
+    }
+
 }

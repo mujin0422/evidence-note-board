@@ -11,7 +11,9 @@ import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
 import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
-import {PIN_SIZE, pinPosition, pinMenuPosition} from './pinMath.js';
+import {PIN_SIZE, pinPosition} from './pinMath.js';
+import {pinCenter, menuNearPin, stringControlPoints, nearestTargetPin}
+    from './stringMath.js';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
@@ -26,6 +28,9 @@ export class BoardView {
         this._imagePicker = null;
         this._resizeSession = null;
         this._pinMenu = null;
+        this._stringsLayer = null;
+        this._connections = new Map();
+        this._stringDraft = null;
         this._deletingNotes = new Set();
         this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
@@ -69,6 +74,12 @@ export class BoardView {
         this._world.set_size(4000, 3000);
         this._world.set_pivot_point(0, 0);
         this._root.add_child(this._world);
+        // A single non-reactive Cairo surface BELOW the notes and pins.
+        // Avoid Clutter.Canvas (removed in modern Mutter).
+        this._stringsLayer = new St.DrawingArea({reactive: false});
+        this._stringsLayer.set_size(4000, 3000);
+        this._stringsLayer.connect('repaint', area => this._paintStrings(area));
+        this._world.add_child(this._stringsLayer);
 
         this._hud = new St.Label({reactive: false, style_class: 'evidence-board-hud'});
         this._hud.set_position(22, 55);
@@ -117,6 +128,10 @@ export class BoardView {
         this._monitorSignal = Main.layoutManager.connect('monitors-changed', () => this._resize());
         for (const name of ['notify::width', 'notify::height'])
             this._stageSignals.push(global.stage.connect(name, () => this._resize()));
+        // Capturing at the Stage sees button release BEFORE a pin can consume
+        // it. Fixes the cursor-stuck-to-pin regression at source.
+        this._stageSignals.push(global.stage.connect('captured-event',
+            (_actor, event) => this._capturedPointer(event)));
 
         // AUTO_START uses the per-user D-Bus activation entry if the
         // backend has not started yet. Name-owner changes make reconnection
@@ -150,11 +165,15 @@ export class BoardView {
     async _connectBackend() {
         const revision = ++this._connectionRevision;
         const service = await NoteService.connect();
-        const [notes, view] = await Promise.all([service.listNotes(), service.getView()]);
+        const [notes, view, connections] = await Promise.all([
+            service.listNotes(), service.getView(), service.listConnections(),
+        ]);
         // A backend restart or extension disable invalidates in-flight RPCs.
         if (!this._alive || revision !== this._connectionRevision)
             return;
         this._service = service;
+        this._connections = new Map(connections.map(c => [c.id, c]));
+        this._queueStrings();
         if (Number.isFinite(view.zoom) && view.zoom >= 0.25 && view.zoom <= 3 &&
             Number.isFinite(view.pan_x) && Number.isFinite(view.pan_y)) {
             this._view = {zoom: view.zoom, panX: view.pan_x, panY: view.pan_y};
@@ -189,6 +208,7 @@ export class BoardView {
     _resize() {
         if (this._root)
             this._root.set_size(global.stage.width, global.stage.height);
+        this._positionPinMenu();
     }
 
     _applyView() {
@@ -198,6 +218,8 @@ export class BoardView {
         this._world.set_position(this._view.panX, this._view.panY);
         if (this._service)
             this._setStatus('Ctrl+Wheel: zoom · chuột giữa: pan');
+        this._positionPinMenu();
+        this._queueStrings();
     }
 
     _scheduleView() {
@@ -347,10 +369,9 @@ export class BoardView {
             const point = pinPosition(note);
             item.pin.set_position(point.x, point.y);
         }
-        if (this._pinMenu?.noteId === note.id) {
-            const point = pinMenuPosition(note);
-            this._pinMenu.actor.set_position(point.x, point.y);
-        }
+        if (this._pinMenu?.noteId === note.id)
+            this._positionPinMenu();
+        this._queueStrings();
         item.actor.set_pivot_point(0.5, 0.5);
         item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
         if (note.type === 'image') {
@@ -407,6 +428,19 @@ export class BoardView {
             this._doubleClick.reset();
             if (event.get_button() === 1) {
                 this._closePinMenu();
+                // Shift+drag from pin A onto pin B OR Shift+click A then
+                // click B adds a red string. Both modes are supported.
+                if (this._stringDraft) {
+                    if (note.id !== this._stringDraft.sourceId)
+                        this._completeString(note.id);
+                    else
+                        this._cancelString();
+                    return Clutter.EVENT_STOP;
+                }
+                if (event.get_state() & Clutter.ModifierType.SHIFT_MASK) {
+                    this._startString(note, event);
+                    return Clutter.EVENT_STOP;
+                }
                 return this._startNoteDrag(event, note);
             }
             if (event.get_button() === 3) {
@@ -429,21 +463,49 @@ export class BoardView {
         this._pinMenu = null;
     }
 
+    _positionPinMenu() {
+        if (!this._pinMenu || !this._root)
+            return;
+        const {actor, noteId} = this._pinMenu;
+        const note = this._notes.get(noteId)?.note;
+        if (!note)
+            return;
+        const point = menuNearPin(note, this._view,
+            {width: this._root.width, height: this._root.height},
+            actor.width, actor.height);
+        actor.set_position(point.x, point.y);
+    }
+
     _togglePinMenu(note) {
         if (this._pinMenu?.noteId === note.id) {
             this._closePinMenu();
             return;
         }
         this._closePinMenu();
+        this._cancelString();
+        // IMPORTANT: menu is a SCREEN-SPACE overlay. It is not scaled or
+        // translated by _world, so the pin-to-menu gap is always 5 px.
         const menu = new St.BoxLayout({
             reactive: true,
             orientation: Clutter.Orientation.VERTICAL,
             style_class: 'evidence-pin-menu',
         });
+        const related = [...this._connections.values()].filter(c =>
+            c.source_note_id === note.id || c.target_note_id === note.id);
         menu.add_child(new St.Label({
             text: note.type === 'image' ? 'ẢNH ĐÃ GHIM' : 'GHI CHÚ ĐÃ GHIM',
             reactive: false, style_class: 'evidence-pin-menu-title',
         }));
+        // Removing a STRING does not delete either endpoint.
+        for (let i = 0; i < Math.min(related.length, 6); i++) {
+            const connection = related[i];
+            const detach = new St.Button({
+                label: `Tháo dây đỏ #${i + 1}`,
+                can_focus: true, style_class: 'evidence-pin-cancel',
+            });
+            detach.connect('clicked', () => this._removeString(connection.id));
+            menu.add_child(detach);
+        }
         const remove = new St.Button({
             label: note.type === 'image' ? 'Xóa ảnh' : 'Xóa ghi chú',
             can_focus: true, style_class: 'evidence-pin-delete',
@@ -464,10 +526,90 @@ export class BoardView {
         });
         cancel.connect('clicked', () => this._closePinMenu());
         menu.add_child(cancel);
-        this._world.add_child(menu);
+        menu.set_size(198, 118 + 34 * Math.min(related.length, 6));
+        this._root.add_child(menu);
         this._pinMenu = {noteId: note.id, actor: menu};
-        const point = pinMenuPosition(note);
-        menu.set_position(point.x, point.y);
+        this._positionPinMenu();
+    }
+
+    _startString(note, event) {
+        const [x, y] = event.get_coords();
+        this._stringDraft = {sourceId: note.id,
+            target: {x: (x - this._view.panX) / this._view.zoom,
+                y: (y - this._view.panY) / this._view.zoom}};
+        this._setStatus('DÂY ĐỎ · kéo sang pin khác hoặc nhấp pin đích · Esc hủy');
+        this._queueStrings();
+    }
+
+    _cancelString() {
+        if (!this._stringDraft)
+            return;
+        this._stringDraft = null;
+        this._queueStrings();
+    }
+
+    _completeString(targetId) {
+        const draft = this._stringDraft;
+        if (!draft || draft.sourceId === targetId || !this._service)
+            return;
+        this._cancelString();
+        this._service.createConnection(draft.sourceId, targetId)
+            .then(edge => {
+                if (!this._alive) return;
+                this._connections.set(edge.id, edge);
+                this._queueStrings();
+                this._setStatus('PHASE 4 · ĐÃ NỐI DÂY ĐỎ');
+            }).catch(error => {
+                console.warn('Evidence Board: could not save string', error.message);
+                if (this._alive)
+                    this._setStatus('LỖI NỐI DÂY · xem journalctl');
+            });
+    }
+
+    _removeString(id) {
+        if (!this._service)
+            return;
+        this._service.deleteConnection(id).then(() => {
+            if (!this._alive) return;
+            this._connections.delete(id);
+            this._closePinMenu();
+            this._queueStrings();
+            this._setStatus('PHASE 4 · ĐÃ THÁO DÂY ĐỎ');
+        }).catch(() => this._saveError());
+    }
+
+    _queueStrings() {
+        this._stringsLayer?.queue_repaint();
+    }
+
+    _paintStrings(area) {
+        const cr = area.get_context();
+        try {
+            const draw = (a, b, isDraft = false) => {
+                const g = stringControlPoints(a, b);
+                cr.moveTo(g.a.x, g.a.y);
+                cr.curveTo(g.c1.x, g.c1.y, g.c2.x, g.c2.y, g.b.x, g.b.y);
+                cr.setSourceRGBA(0.12, 0.015, 0.015, 0.8);
+                cr.setLineWidth(isDraft ? 4.6 : 5.2);
+                cr.strokePreserve();
+                cr.setSourceRGBA(0.72, 0.08, 0.09, isDraft ? 0.68 : 0.96);
+                cr.setLineWidth(isDraft ? 2.2 : 2.8);
+                cr.stroke();
+            };
+            for (const edge of this._connections.values()) {
+                const a = this._notes.get(edge.source_note_id)?.note;
+                const b = this._notes.get(edge.target_note_id)?.note;
+                if (a && b)
+                    draw(pinCenter(a), pinCenter(b));
+            }
+            if (this._stringDraft) {
+                const start = this._notes.get(this._stringDraft.sourceId)?.note;
+                if (start)
+                    draw(pinCenter(start), this._stringDraft.target, true);
+            }
+        } finally {
+            cr.$dispose();
+        }
     }
 
     _deletePinnedNote(note) {
@@ -482,6 +624,13 @@ export class BoardView {
                 return;
             this._closePinMenu();
             this._cancelNoteTimer(id);
+            for (const [edgeId, edge] of this._connections) {
+                if (edge.source_note_id === id || edge.target_note_id === id)
+                    this._connections.delete(edgeId);
+            }
+            if (this._stringDraft?.sourceId === id)
+                this._cancelString();
+            this._queueStrings();
             const item = this._notes.get(id);
             if (item) {
                 item.pin?.destroy();
@@ -533,6 +682,16 @@ export class BoardView {
 
         if (event.get_button() === 1) {
             const [x, y] = event.get_coords();
+            if (this._pinMenu) {
+                const {actor} = this._pinMenu;
+                const inside = x >= actor.x && y >= actor.y &&
+                    x <= actor.x + actor.width && y <= actor.y + actor.height;
+                if (inside) {
+                    this._doubleClick.reset();
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                this._closePinMenu();
+            }
             // The event source can differ from the root even for a blank
             // background click on GNOME Classic. Decide from screen/world
             // geometry instead; don't intercept clicks inside note editors.
@@ -582,7 +741,10 @@ export class BoardView {
     }
 
     _startNoteDrag(event, note) {
-        if (event.get_button() !== 1 || !this._service || !this._beginGrab())
+        // Stage event capture sees mouse-up even when pin's own release
+        // signal returns STOP. Do NOT grab the root for pin dragging:
+        // the old grab swallowed the release and left notes stuck.
+        if (event.get_button() !== 1 || !this._service || this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
         const [x, y] = event.get_coords();
         this._dragPoint = {x, y};
@@ -635,6 +797,72 @@ export class BoardView {
         });
     }
 
+    _capturedPointer(event) {
+        if (!this._alive)
+            return Clutter.EVENT_PROPAGATE;
+        const type = event.type();
+        if (type === Clutter.EventType.KEY_PRESS && this._stringDraft &&
+            event.get_key_symbol() === Clutter.KEY_Escape) {
+            this._cancelString();
+            return Clutter.EVENT_STOP;
+        }
+        if (type === Clutter.EventType.MOTION) {
+            const [x, y] = event.get_coords();
+            if (this._dragPoint) {
+                // Recover if release occurred outside the desktop actor.
+                const button = this._dragNote || this._resizeSession
+                    ? Clutter.ModifierType.BUTTON1_MASK
+                    : Clutter.ModifierType.BUTTON2_MASK;
+                if (!(event.get_state() & button)) {
+                    const changed = this._releaseAsAborted();
+                    return changed ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
+                }
+                return this._motion(event);
+            }
+            if (this._stringDraft) {
+                this._stringDraft.target = {
+                    x: (x - this._view.panX) / this._view.zoom,
+                    y: (y - this._view.panY) / this._view.zoom,
+                };
+                this._queueStrings();
+            }
+        }
+        if (type === Clutter.EventType.BUTTON_RELEASE) {
+            if (this._dragPoint) {
+                const result = this._release(event);
+                if (result === Clutter.EVENT_STOP)
+                    return result;
+            }
+            if (this._stringDraft && event.get_button() === 1) {
+                const [x, y] = event.get_coords();
+                const targetId = nearestTargetPin(
+                    [...this._notes.values()].map(item => item.note),
+                    this._view, {x, y}, this._stringDraft.sourceId);
+                if (targetId) {
+                    this._completeString(targetId);
+                    return Clutter.EVENT_STOP;
+                }
+            }
+        }
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    _releaseAsAborted() {
+        if (!this._dragPoint)
+            return false;
+        // Persist at the last valid position instead of leaving grab active.
+        const note = this._dragNote;
+        const resize = this._resizeSession?.note;
+        this._endDrag();
+        if (note)
+            this._service?.moveNote(note.id, note.x, note.y)
+                .catch(() => this._saveError());
+        else if (resize)
+            this._service?.updateGeometry(resize.id, resize.width,
+                resize.height, resize.rotation).catch(() => this._saveError());
+        return true;
+    }
+
     _motion(event) {
         if (!this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
@@ -668,6 +896,7 @@ export class BoardView {
             this._notes.get(this._dragNote.id)?.actor.set_position(
                 this._dragNote.x, this._dragNote.y);
             this._applyGeometry(this._dragNote);
+            this._queueStrings();
         } else {
             this._view = panBy(this._view, dx, dy);
             this._applyView();
@@ -819,8 +1048,11 @@ export class BoardView {
     }
 
     destroy() {
+        this._cancelString();
         this._closePinMenu();
         this._deletingNotes.clear();
+        this._connections.clear();
+        this._stringsLayer = null;
         this._alive = false;
         this._connectionRevision++;
         if (this._backendWatchId) {

@@ -1,5 +1,27 @@
 # Evidence Note Board
 
+## Phase 4.2 — Dây đỏ và sửa thao tác ghim
+
+- **Kéo note:** giữ chuột trái trên pin để kéo, thả là dừng.
+- **Menu pin:** nhấp phải pin, menu cách pin khoảng 5 pixel ở mọi mức zoom.
+- **Tạo dây đỏ:** giữ **Shift**, click pin A và di chuột sang pin B,
+  thả trên B; hoặc Shift-click A rồi click B.
+- **Xóa dây:** nhấp phải pin, chọn `Tháo dây đỏ #N`. Không xóa note.
+- **Xóa note/ảnh:** nhấp phải pin, chọn Xóa rồi Xác nhận xóa lần hai.
+- Dây đỏ cong theo pin khi kéo, resize, rotate; tự lưu SQLite.
+
+Cần cập nhật cả Rust backend và GNOME Shell extension:
+```bash
+git fetch origin
+git switch --track origin/feat/phase4-pin-drag-red-strings
+bash scripts/setup-dev.sh
+```
+Đăng xuất/đăng nhập GNOME Classic Wayland để nạp extension. Không xóa
+`evidence.db` hoặc ảnh; backend backfill pin cũ mà không migration.
+Xem [Phase 4](docs/phases/PHASE_04.md). PR dạng Draft cho tới nghiệm thu.
+
+---
+
 ## Phase 4.1 — ghim đỏ và thao tác từ pin
 
 Mỗi note/ảnh có đầu ghim đỏ 3D ở giữa mép trên. Giữ chuột trái vào pin
