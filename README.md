@@ -2,15 +2,15 @@
 
 Ứng dụng Linux desktop native theo phong cách bảng điều tra, phát triển cho **Fedora GNOME Classic 50.5 / Wayland**. Dữ liệu lưu **cục bộ**; không có tài khoản, cloud hay Electron.
 
-> **Trạng thái:** Phase 2 đang triển khai trên nhánh tính năng, chưa được nghiệm thu trên GNOME thực tế. Không xem CI xanh là xác nhận giao diện hoạt động.
+> **Trạng thái:** Phase 2 đã được người dùng nghiệm thu MVP trên Fedora GNOME Classic 50.5 (tạo, nhập multiline, di chuyển, xóa, lưu/khôi phục). Phase 3 đang ở bản PR thử nghiệm; CI không thay cho kiểm thử giao diện thật.
 
 ## Tiến độ theo phase
 
 | Phase | Phạm vi | Thực trạng |
 |---|---|---|
 | [01 — Desktop PoC](docs/phases/PHASE_01.md) | Board charcoal, Ctrl+Wheel zoom, middle-drag pan | Có source + CI; **chưa xác minh** GNOME Classic thực tế |
-| [02 — Text notes & SQLite](docs/phases/PHASE_02.md) | Rust user service, D-Bus async, text CRUD, kéo note, khôi phục camera và note | **Đã viết source**, chờ build/CI + nghiệm thu Fedora |
-| 03 | Image notes, nhập ảnh, giấy vintage | Chưa bắt đầu |
+| [02 — Text notes & SQLite](docs/phases/PHASE_02.md) | Rust user service, D-Bus async, text CRUD, kéo note, khôi phục camera và note | **MVP nghiệm thu trên Fedora**, còn các stress/edge cases thuộc Phase 5 |
+| [03 — Image notes](docs/phases/PHASE_03.md) | Import file PNG/JPEG/WebP qua Zenity, ảnh Polaroid và asset storage | **Đang triển khai** — chưa nghiệm thu Fedora |
 | 04 | Pin & red strings | Chưa bắt đầu |
 | 05 | Robustness, multi-monitor, settings | Chưa bắt đầu |
 | 06 | RPM, releases | Chưa bắt đầu |
@@ -33,7 +33,7 @@ Không có ảnh, dây đỏ, Undo, resize, multiple boards hay RPM trong Phase 
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
 git fetch origin
-git switch --track origin/fix/phase2-body-only-notes
+git switch --track origin/feat/phase3-image-notes-core
 bash scripts/install-backend-dev.sh
 bash scripts/install-dev.sh
 ```
@@ -114,3 +114,31 @@ Xem [Phase 2](docs/phases/PHASE_02.md) và [Testing](docs/TESTING.md).
 Nếu đang thử PR chưa merge, checkout `fix/phase2-body-only-notes`, chạy
 `bash scripts/install-dev.sh`, đăng xuất/đăng nhập Wayland rồi bật lại
 extension. Không cần xóa database hay build lại Rust.
+
+## Phase 3 — nhập ảnh bản thử nghiệm
+
+- Dùng nút **+ ẢNH** trên board để chọn file bằng `zenity` (GTK file picker).
+- Chấp nhận PNG/JPEG/WebP tối đa 16 MiB, giới hạn 20 triệu điểm ảnh.
+- Backend Rust kiểm tra nội dung thật của ảnh, sao chép file vào
+  `~/.local/share/evidence-note-board/assets/` và lưu metadata trong
+  SQLite. Ảnh nguồn không bị chỉnh sửa.
+- Board hiển thị ảnh có khung giấy trắng ngà kiểu Polaroid, cho phép di chuyển
+  và xóa (xóa cả bản sao asset), khôi phục khi bật lại extension.
+- Cần cài `zenity` trên Fedora: `sudo dnf install zenity`.
+- **Bản này chưa có** drag/drop từ file manager, paste clipboard, resize,
+  rotate hoặc duplicate; các tính năng này nằm trong checklist Phase 3 chưa
+  hoàn thành tại [PHASE_03](docs/phases/PHASE_03.md).
+
+**Chú ý:** Phase 3 cần build và cài lại backend Rust, không chỉ extension.
+```bash
+git fetch origin
+git switch --track origin/feat/phase3-image-notes-core
+gnome-extensions disable evidence-note-board@mujin0422.github.io
+systemctl --user stop evidence-note-board.service
+bash scripts/install-backend-dev.sh
+bash scripts/install-dev.sh
+# Đăng xuất/đăng nhập GNOME Wayland để nạp lại extension
+gnome-extensions enable evidence-note-board@mujin0422.github.io
+```
+
+Không xóa cơ sở dữ liệu khi nâng cấp.

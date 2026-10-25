@@ -45,3 +45,24 @@
 .evidence-create-button:hover {
     background-color: #a32626;
 }
+
+.evidence-image-button {
+    background-color: #40352a;
+    border-color: #75624b;
+}
+.evidence-image-button:hover {
+    background-color: #5d4a37;
+}
+.evidence-photo {
+    background-color: #f1e9d2;
+    border-radius: 2px;
+    padding: 8px 12px 22px 12px;
+    spacing: 4px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+}
+.evidence-photo-header {
+    spacing: 12px;
+}
+.evidence-photo-image {
+    padding: 0;
+}

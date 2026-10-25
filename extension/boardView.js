@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
@@ -19,6 +20,8 @@ export class BoardView {
         this._world = null;
         this._hud = null;
         this._createButton = null;
+        this._imageButton = null;
+        this._imagePicker = null;
         this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
         this._backgroundSignal = 0;
@@ -79,6 +82,16 @@ export class BoardView {
                 this._createNoteAtScreen(x, y);
         });
         this._root.add_child(this._createButton);
+
+        this._imageButton = new St.Button({
+            label: '+ ẢNH',
+            reactive: true,
+            can_focus: true,
+            style_class: 'evidence-create-button evidence-image-button',
+        });
+        this._imageButton.set_position(150, 98);
+        this._imageButton.connect('clicked', () => this._chooseImage());
+        this._root.add_child(this._imageButton);
         this._resize();
         this._setStatus('Đang kết nối backend…');
 
@@ -233,6 +246,115 @@ export class BoardView {
             });
     }
 
+    async _chooseImage() {
+        if (!this._service || !this._alive) {
+            this._setStatus('BACKEND OFFLINE · không thể nhập ảnh');
+            return;
+        }
+        if (this._imagePicker)
+            return;
+        if (!GLib.find_program_in_path('zenity')) {
+            this._setStatus('Cần cài Zenity · sudo dnf install zenity');
+            return;
+        }
+
+        try {
+            // Native GTK file-picker process, NOT an overlay or GNOME Shell
+            // synchronous file chooser. It does not block compositor input.
+            const process = Gio.Subprocess.new([
+                'zenity', '--file-selection',
+                '--title=Nhập ảnh vào Evidence Note Board',
+                '--file-filter=Images | *.png *.PNG *.jpg *.jpeg *.JPG *.JPEG *.webp *.WEBP',
+            ], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            this._imagePicker = process;
+            const [ok, stdout] = await new Promise((resolve, reject) => {
+                process.communicate_utf8_async(null, null, (proc, result) => {
+                    try {
+                        resolve(proc.communicate_utf8_finish(result));
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
+            if (!this._alive || this._imagePicker !== process)
+                return;
+            if (!ok || !process.get_successful())
+                return; // User cancelled; no error.
+            const selected = stdout.trim();
+            if (!selected)
+                return;
+            const at = screenToWorld(this._view, {
+                x: this._root.width / 2,
+                y: this._root.height / 2,
+            });
+            this._setStatus('Đang nhập ảnh vào bộ nhớ cục bộ…');
+            const note = await this._service.importImage(selected, at.x, at.y);
+            if (!this._alive)
+                return;
+            try {
+                this._renderNote(note);
+                this._setStatus('PHASE 3 · ĐÃ NHẬP ẢNH VÀO SQLITE');
+            } catch (error) {
+                console.error(error, 'Evidence Note Board: image saved but render failed');
+                this._setStatus('ẢNH ĐÃ LƯU, LỖI HIỂN THỊ · xem journalctl');
+            }
+        } catch (error) {
+            if (this._alive) {
+                console.warn('Evidence Note Board: image import failed', error.message);
+                this._setStatus('LỖI NHẬP ẢNH · kiểm tra Zenity và backend');
+            }
+        } finally {
+            this._imagePicker = null;
+        }
+    }
+
+    _renderImageNote(note) {
+        if (!this._alive || this._notes.has(note.id))
+            return;
+        if (!note.asset_path)
+            throw new Error('Image note has no local asset path');
+        const paper = new St.BoxLayout({
+            reactive: true,
+            orientation: Clutter.Orientation.VERTICAL,
+            style_class: 'evidence-photo',
+        });
+        paper.set_size(note.width, note.height);
+        paper.set_position(note.x, note.y);
+        const header = new St.BoxLayout({reactive: true, style_class: 'evidence-photo-header'});
+        const handle = new St.Label({
+            text: '●  ẢNH ĐIỀU TRA',
+            reactive: true,
+            style_class: 'evidence-note-handle',
+        });
+        handle.connect('button-press-event', (_actor, event) => this._startNoteDrag(event, note));
+        header.add_child(handle);
+        const remove = new St.Button({label: '×', style_class: 'evidence-delete'});
+        remove.connect('clicked', () => {
+            if (remove.label !== 'Xóa?') {
+                remove.set_label('Xóa?');
+                return;
+            }
+            this._service?.deleteNote(note.id).then(() => {
+                if (this._alive) {
+                    this._notes.get(note.id)?.actor.destroy();
+                    this._notes.delete(note.id);
+                }
+            }).catch(() => this._saveError());
+        });
+        header.add_child(remove);
+        paper.add_child(header);
+        const photo = new St.Icon({
+            gicon: new Gio.FileIcon({file: Gio.File.new_for_path(note.asset_path)}),
+            icon_size: Math.max(64, Math.round(note.width - 24)),
+            style_class: 'evidence-photo-image',
+            reactive: false,
+        });
+        photo.set_size(note.width - 24, note.height - 48);
+        paper.add_child(photo);
+        this._notes.set(note.id, {note, actor: paper});
+        this._world.add_child(paper);
+    }
+
     _press(event) {
         if (!this._service)
             return Clutter.EVENT_PROPAGATE;
@@ -243,9 +365,9 @@ export class BoardView {
             // background click on GNOME Classic. Decide from screen/world
             // geometry instead; don't intercept clicks inside note editors.
             const uiRects = [
-                {x: 0, y: 0, width: 510, height: 145},
+                {x: 0, y: 0, width: 600, height: 145},
             ];
-            for (const actor of [this._hud, this._createButton]) {
+            for (const actor of [this._hud, this._createButton, this._imageButton]) {
                 if (!actor)
                     continue;
                 const [ax, ay] = actor.get_position();
@@ -340,6 +462,8 @@ export class BoardView {
     }
 
     _renderNote(note, focus = false) {
+        if (note.type === 'image')
+            return this._renderImageNote(note);
         if (!this._alive || this._notes.has(note.id))
             return;
 
@@ -455,6 +579,8 @@ export class BoardView {
         const item = this._notes.get(id);
         if (!item || !this._service)
             return;
+        if (!item.body) // Image notes contain no editable text.
+            return;
         const content = item.body.get_text();
         // Leave the existing DB schema and D-Bus signature intact while
         // using an empty legacy title for body-only notes.
@@ -470,6 +596,8 @@ export class BoardView {
 
     destroy() {
         this._alive = false;
+        this._imagePicker?.force_exit();
+        this._imagePicker = null;
         this._doubleClick.reset();
         this._endDrag();
         for (const id of [...this._timers.keys()])

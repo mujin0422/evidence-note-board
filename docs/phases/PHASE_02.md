@@ -163,3 +163,17 @@ toàn bộ phần giấy không viền và xuống dòng bằng Enter.
 
 **Trạng thái:** code + unit/static tests đã thêm vào branch P2.4.
 Chưa coi là nghiệm thu GNOME UI cho tới khi có kết quả trực tiếp.
+
+## Biên bản nghiệm thu MVP — 25/10/2026
+
+**Người dùng xác nhận trên Fedora GNOME Classic 50.5 Wayland:** board và
+ghi chú hiển thị, double-click và nút + tạo note, kéo thả, nhập nhiều dòng
+không title/viền, xóa note, lưu khôi phục nội dung/vị trí/zoom sau khi
+đăng xuất và đăng nhập lại đều hoạt động. SQLite/D-Bus trước đó đã được
+kiểm tra qua `ListNotes`; CI backend đã xanh tại commit `dev`.
+
+**Kết luận:** Phase 2 **MVP accepted**, đủ điều kiện bắt đầu Phase 3.
+Các checklist trước đây còn ô chưa đánh dấu là lịch sử của quá trình sửa
+lỗi, không phản ánh kết quả nghiệm thu mới này. Các mục cần thử thêm ở
+Phase 5: nhiều màn hình, crash recovery, IME đặc biệt, trường hợp service
+khởi động chậm và hiệu năng lớn.

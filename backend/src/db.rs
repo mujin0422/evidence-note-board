@@ -185,7 +185,7 @@ impl Storage {
     pub fn update_note(&self, id: &str, title: &str, content: &str) -> Result<bool> {
         Ok(self.conn.execute(
             "UPDATE notes SET title = ?1, content = ?2, updated_at = unixepoch()
-             WHERE id = ?3 AND board_id = ?4",
+             WHERE id = ?3 AND board_id = ?4 AND type = 'text'",
             params![title, content, id, BOARD_ID],
         )? == 1)
     }
@@ -193,7 +193,7 @@ impl Storage {
     pub fn move_note(&self, id: &str, x: f64, y: f64) -> Result<bool> {
         Ok(self.conn.execute(
             "UPDATE notes SET x = ?1, y = ?2, updated_at = unixepoch()
-             WHERE id = ?3 AND board_id = ?4 AND type = 'text'",
+             WHERE id = ?3 AND board_id = ?4",
             params![x, y, id, BOARD_ID],
         )? == 1)
     }
