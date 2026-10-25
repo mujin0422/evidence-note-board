@@ -53,3 +53,15 @@ Kết luận:
 Theo phản hồi thực tế, PoC hiển thị board nhưng không thể tạo note bằng double-click. Đã bổ sung kiểm thử tự động cho `DoubleClickTracker` và nút `+ GHI CHÚ` làm phương án thao tác trực tiếp. Sau khi cài lại extension từ branch fix, thử cả hai cách tạo note, kiểm tra database sau restart và ghi log lỗi nếu có.
 
 Các test thuần JavaScript không chứng minh tính tương thích pointer picking và input focus của GNOME Classic; cần người dùng xác nhận. Xem danh sách riêng tại [PHASE_02](phases/PHASE_02.md).
+
+## Regression GNOME 50 — màu chữ / ghi chú lưu nhưng không render
+
+- [ ] Mã chạy hiển thị HUD có `P2.1`; `gnome-extensions info` nhận metadata version 3.
+- [ ] Khi nhấn nút tạo hoặc double click, HUD cho biết `ĐÃ LƯU & HIỂN THỊ`, card xuất hiện.
+- [ ] Text editor nhận click và có thể nhập Unicode tiếng Việt nhiều dòng.
+- [ ] Backend D-Bus `ListNotes` trả về các note được tạo; không có note ẩn do lỗi render.
+- [ ] Restart extension và đăng nhập lại vẫn hiện đúng note.
+- [ ] Trường hợp lỗi rendering hiện `ĐÃ LƯU NHƯNG LỖI HIỂN THỊ`, không bị nhầm với lỗi lưu.
+- [ ] Kiểm tra full journal (bao gồm dòng lỗi gốc) thay vì grep riêng tên extension.
+
+Bộ test `python3 tests/check_gnome50_api.py` ngăn tái sử dụng `Clutter.Color` đã bị loại bỏ trong GNOME 50. Đây chỉ là kiểm tra tĩnh, không thay thế nghiệm thu GNOME Classic.

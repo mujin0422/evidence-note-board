@@ -25,6 +25,7 @@ jobs:
         run: |
           python3 tests/check_migration.py
           python3 tests/check_extension.py
+          python3 tests/check_gnome50_api.py
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh
       - name: Package
         run: |
