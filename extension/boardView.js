@@ -12,7 +12,7 @@ import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
 import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
 import {PIN_SIZE, pinPosition} from './pinMath.js';
-import {pinCenter, menuNearPin, stringControlPoints, nearestTargetPin}
+import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
     from './stringMath.js';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
 
@@ -74,12 +74,21 @@ export class BoardView {
         this._world.set_size(4000, 3000);
         this._world.set_pivot_point(0, 0);
         this._root.add_child(this._world);
-        // A single non-reactive Cairo surface BELOW the notes and pins.
-        // Avoid Clutter.Canvas (removed in modern Mutter).
-        this._stringsLayer = new St.DrawingArea({reactive: false});
-        this._stringsLayer.set_size(4000, 3000);
-        this._stringsLayer.connect('repaint', area => this._paintStrings(area));
-        this._world.add_child(this._stringsLayer);
+        // Screen-sized overlay is below the world actor (paper/pins).
+        // The previous 4000x3000 world-space Cairo texture was oversized
+        // and could fail to display on real GNOME Shell compositors.
+        this._stringsLayer = new St.DrawingArea({
+            reactive: false, style_class: 'evidence-strings-layer',
+        });
+        this._stringsLayer.connect('repaint', area => {
+            try {
+                this._paintStrings(area);
+            } catch (error) {
+                console.error(error, 'Evidence Note Board: red string repaint failed');
+            }
+        });
+        this._root.add_child(this._stringsLayer);
+        this._root.set_child_below_sibling(this._stringsLayer, this._world);
 
         this._hud = new St.Label({reactive: false, style_class: 'evidence-board-hud'});
         this._hud.set_position(22, 55);
@@ -208,6 +217,10 @@ export class BoardView {
     _resize() {
         if (this._root)
             this._root.set_size(global.stage.width, global.stage.height);
+        if (this._stringsLayer) {
+            this._stringsLayer.set_size(global.stage.width, global.stage.height);
+            this._queueStrings();
+        }
         this._positionPinMenu();
     }
 
@@ -558,7 +571,7 @@ export class BoardView {
                 if (!this._alive) return;
                 this._connections.set(edge.id, edge);
                 this._queueStrings();
-                this._setStatus('PHASE 4 · ĐÃ NỐI DÂY ĐỎ');
+                this._setStatus('PHASE 4 · ĐÃ LƯU LIÊN KẾT · dây đỏ trên board');
             }).catch(error => {
                 console.warn('Evidence Board: could not save string', error.message);
                 if (this._alive)
@@ -596,16 +609,18 @@ export class BoardView {
                 cr.setLineWidth(isDraft ? 2.2 : 2.8);
                 cr.stroke();
             };
+            const project = point => worldToScreen(this._view, point);
             for (const edge of this._connections.values()) {
                 const a = this._notes.get(edge.source_note_id)?.note;
                 const b = this._notes.get(edge.target_note_id)?.note;
                 if (a && b)
-                    draw(pinCenter(a), pinCenter(b));
+                    draw(project(pinCenter(a)), project(pinCenter(b)));
             }
             if (this._stringDraft) {
                 const start = this._notes.get(this._stringDraft.sourceId)?.note;
                 if (start)
-                    draw(pinCenter(start), this._stringDraft.target, true);
+                    draw(project(pinCenter(start)),
+                        project(this._stringDraft.target), true);
             }
         } finally {
             cr.$dispose();

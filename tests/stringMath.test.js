@@ -39,6 +39,18 @@ test('pin hit-test respects zoom and rejects the source itself', () => {
     assert.equal(nearestTargetPin([first,second],view,screen,'b'),null);
 });
 
+test('red string ends project correctly at zoom 25/100/300 with pan', () => {
+    for (const zoom of [.25, 1, 3]) {
+        const view={zoom,panX:-170,panY:85};
+        const a=worldToScreen(view, pinCenter(first));
+        const b=worldToScreen(view, pinCenter(second));
+        assert.equal(a.x, -170 + pinCenter(first).x * zoom);
+        assert.equal(a.y, 85 + pinCenter(first).y * zoom);
+        assert.deepEqual(stringControlPoints(a,b).a,a);
+        assert.deepEqual(stringControlPoints(a,b).b,b);
+    }
+});
+
 test('string control points work for exact world-space cursor positions', () => {
     const a={x:120,y:200}, b={x:650,y:300};
     const g=stringControlPoints(a,b);

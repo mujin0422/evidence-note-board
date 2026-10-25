@@ -495,6 +495,36 @@ mod tests {
     }
 
     #[test]
+    fn deleting_a_pin_owner_removes_all_its_edges_but_keeps_unrelated_edges() {
+        let mut db = mem();
+        let a = db.create_note("", "hub", 0.0, 0.0).unwrap().id;
+        let b = db.create_note("", "leaf", 100.0, 0.0).unwrap().id;
+        let c = db.create_note("", "leaf", 200.0, 0.0).unwrap().id;
+        let d = db.create_note("", "independent", 300.0, 0.0).unwrap().id;
+        let e = db.create_note("", "independent", 400.0, 0.0).unwrap().id;
+        // Prevent self-links in backend, not just UI.
+        assert!(db.create_connection(&a, &a).is_err());
+        let ab = db.create_connection(&a, &b).unwrap();
+        let ac = db.create_connection(&a, &c).unwrap();
+        let de = db.create_connection(&d, &e).unwrap();
+        assert_eq!(db.list_connections().unwrap().len(), 3);
+        // Deleting a note removes its pin, and SQLite cascades ALL edges
+        // attached to that pin. Unrelated D-E must remain untouched.
+        assert!(db.delete_note(&a).unwrap());
+        let remaining = db.list_connections().unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, de.id);
+        assert!(!remaining.iter().any(|edge| edge.id == ab.id || edge.id == ac.id));
+        assert_eq!(db.list_notes().unwrap().len(), 4);
+        let pins_left: i64 = db.conn.query_row(
+            "SELECT count(*) FROM pins WHERE note_id=?1",
+            [&a], |row| row.get(0),
+        ).unwrap();
+        assert_eq!(pins_left, 0);
+        assert!(db.create_connection(&a, &b).is_err());
+    }
+
+    #[test]
     fn prior_phase_note_without_pin_is_backfilled_without_schema_change() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("existing.db");
