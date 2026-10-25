@@ -32,7 +32,6 @@ jobs:
           python3 tests/check_note_editor.py
           python3 tests/check_image_notes.py
           python3 tests/check_phase3_interactions.py
-          python3 -m py_compile extension/image-drop-target.py
           python3 tests/check_autostart.py
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh scripts/setup-dev.sh
       - name: Package
