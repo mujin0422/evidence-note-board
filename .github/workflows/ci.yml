@@ -1,4 +1,5 @@
 name: Phase 1 static checks
+
 on:
   push:
   pull_request:
@@ -10,21 +11,25 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out source
+      - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Check GJS module syntax
+      - name: JavaScript syntax
         run: |
           node --check extension/extension.js
+          node --check extension/boardView.js
           node --check extension/canvasMath.js
-      - name: Test world-coordinate transformations
+      - name: Camera unit tests
         run: node --test tests/canvasMath.test.js
-      - name: Validate metadata and SQLite migration
+      - name: Validate metadata and planned database schema
         run: |
-          python3 -m json.tool extension/metadata.json > /dev/null
+          python3 tests/check_extension.py
           python3 tests/check_migration.py
-      - name: Package extension ZIP
-        run: bash scripts/build-extension.sh
-      - name: Upload ZIP from PoC
+      - name: Package GNOME extension ZIP
+        run: |
+          bash -n scripts/install-dev.sh scripts/build-extension.sh
+          bash scripts/build-extension.sh
+          python3 tests/check_extension.py
+      - name: Upload PoC ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: evidence-note-board-gnome50-poc

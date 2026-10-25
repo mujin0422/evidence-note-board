@@ -1,79 +1,71 @@
 # Evidence Note Board
 
-A **native Fedora GNOME Wayland desktop evidence board** project. The goal is a local-first noir corkboard with text/image notes, pins and red-string connections.
+**Dự án native Linux dành cho Fedora GNOME Classic 50.5 trên Wayland.**
 
-> **Status: Phase 1 technical proof of concept.** Only the experimental GNOME Shell background board, zoom/pan and disposable example cards are implemented. There is **no SQLite backend, persistent note editing or image import yet**. The background placement and input handling **must be verified on an actual Fedora 44 GNOME 50 Wayland session** before Phase 1 is accepted.
+Ứng dụng hướng tới một bảng điều tra (evidence board) màu đen than ngay tại desktop, sau các cửa sổ thông thường. Giai đoạn hiện tại chỉ là **Phase 1 — Proof of Concept**, chưa phải phiên bản hoàn chỉnh.
 
-## Target
+## Có gì trong Phase 1?
 
-- Fedora Workstation 44 / GNOME Shell 50 / Wayland.
-- Runs as a GNOME Shell Extension, not as a fake wallpaper window.
-- On-screen dark board; illustrative cards only (not saved).
-- Ctrl + mouse wheel: zoom at cursor (25–300%).
-- Middle mouse drag: pan the canvas.
+- GNOME Shell Extension tạo actor màu `#111111` trong background group của Shell.
+- Hai thẻ mẫu để quan sát zoom/pan (không phải ghi chú thật).
+- `Ctrl + Mouse Wheel`: zoom tại vị trí con trỏ (25%–300%).
+- `Middle Mouse Drag`: di chuyển camera trên bảng.
+- Bật/tắt bằng GNOME Extensions; các actor và pointer grab được giải phóng khi disable.
+- Kiểm thử toán học canvas, kiểm tra tĩnh và đóng gói ZIP qua GitHub Actions.
 
-## Run the PoC
+**Giới hạn:** Mã đang sử dụng `Main.layoutManager._backgroundGroup`, một API nội bộ của GNOME Shell. Chưa xác nhận input, stacking, dock hoặc GNOME Classic 50.5 trên máy Fedora thật. Không có backend, SQLite đang chạy, note thật, ảnh hay dây đỏ.
+
+## Cài đặt thử
 
 ```bash
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
+git switch dev
 bash scripts/install-dev.sh
 ```
 
-On a running GNOME session, follow the install script's instructions. For a new extension on Wayland, **log out and log in** if GNOME does not discover it; then enable it with:
+Khi kiểm tra một PR chưa merge, chuyển sang branch của PR thay vì `dev` trước khi cài đặt. Nếu GNOME chưa nhận extension mới, đăng xuất/đăng nhập; sau đó:
 
 ```bash
 gnome-extensions enable evidence-note-board@mujin0422.github.io
 gnome-extensions info evidence-note-board@mujin0422.github.io
 ```
 
-Open a regular window (Firefox or Terminal) and verify the board remains behind it. Test zoom/pan on an uncovered part of the desktop. If anything goes wrong:
+Khôi phục desktop:
 
 ```bash
 gnome-extensions disable evidence-note-board@mujin0422.github.io
-journalctl --user -b | grep -i 'evidence-note-board'
 ```
 
-To uninstall the local development extension:
+Hướng dẫn chi tiết: [INSTALLATION](docs/INSTALLATION.md), [TESTING](docs/TESTING.md).
 
-```bash
-gnome-extensions disable evidence-note-board@mujin0422.github.io
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/evidence-note-board@mujin0422.github.io"
-```
-
-No sudo required. The example board does not create or change your notes or wallpaper settings.
-
-## Verify static checks
+## Kiểm tra mã nguồn
 
 ```bash
 node --check extension/extension.js
+node --check extension/boardView.js
 node --test tests/canvasMath.test.js
 python3 tests/check_migration.py
 bash scripts/build-extension.sh
+python3 tests/check_extension.py
 ```
 
-These tests **cannot** prove compositor input/stacking behavior. Follow [the on-device test plan](docs/PHASE1_TEST_PLAN.md) for manual acceptance.
+Các lệnh này **không** xác minh giao diện GNOME Wayland.
 
-## Architecture / project structure
+## Tài liệu
 
-- `extension/` — GNOME Shell integration and canvas PoC.
-- `db/migrations/` — proposed SQLite schema for Phase 2; not yet wired to a backend.
-- `scripts/` — local extension installation and ZIP packaging.
-- `tests/` — coordinate math and schema static tests.
-- `docs/ARCHITECTURE.md` — feasibility assessment and architectural decision.
-- `docs/PHASE1_TEST_PLAN.md` — GNOME Wayland manual validation.
+- [ARCHITECTURE](docs/ARCHITECTURE.md): so sánh phương án, rủi ro API nội bộ, thiết kế tương lai.
+- [DEVELOPMENT](docs/DEVELOPMENT.md): cấu trúc code, cách phát triển và Git workflow.
+- [TESTING](docs/TESTING.md): tiêu chí nghiệm thu GNOME Classic 50.5.
+- [INSTALLATION](docs/INSTALLATION.md): cài và gỡ PoC.
+- [PHASE1_TEST_PLAN](docs/PHASE1_TEST_PLAN.md): checklist ngắn.
 
-## Roadmap
+## Lộ trình
 
-1. **PoC**: background actor and scroll/pointer interactions on real Fedora GNOME Wayland.
-2. **Notes**: Rust daemon, SQLite migrations, create/edit/delete, drag and restore.
-3. **Images and vintage styling**: import assets into XDG data directory.
-4. **Connections**: pin geometry, red strings and persisted graph edges.
-5. **Reliability**: multi-monitor, performance, settings and user session lifecycle.
-6. **Distribution**: Fedora RPM, release build and installation tests.
+1. **Phase 1:** chứng minh desktop layer + tương tác, yêu cầu test thật.
+2. **Phase 2:** Rust service, SQLite, tạo/sửa/xóa và khôi phục text note.
+3. **Phase 3:** image notes và giao diện giấy cũ.
+4. **Phase 4:** ghim và dây đỏ liên kết.
+5. **Phase 5–6:** ổn định, RPM và release.
 
-See [architecture](docs/ARCHITECTURE.md). None of phases 2–6 is claimed complete.
-
-## Safety
-
-GNOME Shell extensions execute inside the compositor. Test this branch in a nested GNOME session first when possible; keep a terminal ready to disable the extension. No telemetry or remote runtime code.
+Không đưa Electron, cửa sổ always-on-top hay cloud vào kiến trúc desktop board.
