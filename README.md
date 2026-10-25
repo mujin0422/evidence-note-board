@@ -67,3 +67,9 @@ Xem [TESTING](docs/TESTING.md) và [Phase 2 test checklist](docs/phases/PHASE_02
 - [TESTING](docs/TESTING.md) — phân biệt automatic và on-device.
 - [PHASE_01](docs/phases/PHASE_01.md) — kết quả/giới hạn của phase trước.
 - [PHASE_02](docs/phases/PHASE_02.md) — deliverables, acceptance, danh sách chưa xác minh.
+
+## Sửa lỗi tạo note trên desktop (GNOME Classic 50.5)
+
+Nếu board hiện lên nhưng double-click không tạo được note, hãy dùng bản sửa `fix/phase2-double-click-create-note`. Bản sửa loại bỏ lời gọi `event.get_click_count()` không có trong Clutter.Event hiện đại, theo dõi hai lần nhấn chuột bằng timestamp/tọa độ, đồng thời thêm nút `+ GHI CHÚ` ở góc trái để thử tạo note trực tiếp. Ở zoom 25%, note mặc định sẽ trông rất nhỏ; zoom lên 100% để đọc.
+
+Sau khi cập nhật extension, hãy đăng xuất/đăng nhập vào phiên Wayland để nạp lại mã trước khi kiểm tra. Backend Rust hiện tại không phải thay đổi cho lỗi này. Xem [Phase 02](docs/phases/PHASE_02.md).

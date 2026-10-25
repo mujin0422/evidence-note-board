@@ -47,3 +47,9 @@ Phase 2:
 Log / screenshot / reproduction steps:
 Kết luận:
 ```
+
+## Regression: nhấp đúp tạo note trên GNOME Classic 50.5
+
+Theo phản hồi thực tế, PoC hiển thị board nhưng không thể tạo note bằng double-click. Đã bổ sung kiểm thử tự động cho `DoubleClickTracker` và nút `+ GHI CHÚ` làm phương án thao tác trực tiếp. Sau khi cài lại extension từ branch fix, thử cả hai cách tạo note, kiểm tra database sau restart và ghi log lỗi nếu có.
+
+Các test thuần JavaScript không chứng minh tính tương thích pointer picking và input focus của GNOME Classic; cần người dùng xác nhận. Xem danh sách riêng tại [PHASE_02](phases/PHASE_02.md).

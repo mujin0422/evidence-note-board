@@ -41,3 +41,16 @@
     font-size: 16px;
     font-weight: bold;
 }
+
+.evidence-create-button {
+    color: #f1e9d2;
+    background-color: #7f1d1d;
+    border: 1px solid #a32626;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 9px 14px;
+}
+.evidence-create-button:hover {
+    background-color: #a32626;
+}

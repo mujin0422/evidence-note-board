@@ -50,3 +50,23 @@
 ## Định nghĩa Done
 
 **Chỉ hoàn thành Phase 2 khi** CI build Rust pass + DB round-trip test pass + test D-Bus trong phiên người dùng + toàn bộ P2-02..P2-12 được kiểm chứng trên Fedora GNOME Classic 50.5 Wayland. Lỗi cần đưa vào PR sửa mới, không ép đánh dấu hoàn thành.
+
+## Khắc phục sự cố — không thể nhấp đúp tạo note (PR sửa lỗi)
+
+**Báo lỗi thực tế:** Fedora GNOME Classic 50.5 hiển thị board ở zoom 25%, nhưng nhấp đúp không tạo ghi chú.
+
+**Nguyên nhân được xác định trong source:** `boardView.js` gọi `Clutter.Event.get_click_count()` không có trong API Mutter Clutter hiện đại. Việc gọi có thể ném lỗi trước khi gửi D-Bus CreateNote. Đọc API `Clutter.Event`: https://gnome.pages.gitlab.gnome.org/mutter/clutter/union.Event.html.
+
+**Bản sửa:** thay bằng `DoubleClickTracker` theo khoảng thời gian/vị trí và bổ sung nút `+ GHI CHÚ` để test độc lập với double-click. Tạo note hiển thị trạng thái đang tạo/thành công/thất bại. Sự kiện trên note hiện có không được tạo thêm note.
+
+**Bộ kiểm thử bắt buộc tại máy GNOME Classic 50.5:**
+
+- [ ] Nhấn `+ GHI CHÚ`, note mới xuất hiện gần giữa màn hình ở zoom 25%; SQLite tồn tại bản ghi sau re-enable.
+- [ ] Nhấp đúp vào một vùng trống tạo **đúng một** note.
+- [ ] Nhấp đúp vào editor/note khác hoặc nút thêm không vô tình tạo note.
+- [ ] Click chậm, click ở hai vị trí cách xa nhau, click đơn không tạo note.
+- [ ] Di chuyển note và sửa tiếng Việt đa dòng, lưu và khôi phục sau logout/login.
+- [ ] Backend ngừng hoạt động thì nút thêm báo offline, không tạo ghi chú giả; không crash GNOME Shell.
+- [ ] Thử ở 25%, 100%, 300% và kiểm tra hiển thị của note.
+
+**Kết luận:** Đã sửa mã và thêm unit test; chưa đánh dấu đã PASS khi chưa kiểm tra lại desktop trên máy người dùng.
