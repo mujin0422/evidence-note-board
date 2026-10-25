@@ -66,3 +66,20 @@
 .evidence-photo-image {
     padding: 0;
 }
+
+.evidence-photo-action {
+    color: #5c392b;
+    background-color: transparent;
+    border: none;
+    padding: 0 3px;
+    font-size: 14px;
+}
+.evidence-photo-action:hover {
+    color: #992c22;
+}
+.evidence-resize-handle {
+    color: #5e382e;
+    font-size: 17px;
+    font-weight: bold;
+    padding: 0 4px;
+}

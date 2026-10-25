@@ -11,6 +11,7 @@ import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
 import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
+import {resizedTextWidth, resizedImage, requiredPaperHeight, rotateBy} from './geometry.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
@@ -22,6 +23,9 @@ export class BoardView {
         this._createButton = null;
         this._imageButton = null;
         this._imagePicker = null;
+        this._dropButton = null;
+        this._dropProcess = null;
+        this._resizeSession = null;
         this._doubleClick = new DoubleClickTracker();
         this._backgroundGroup = null;
         this._backgroundSignal = 0;
@@ -94,6 +98,16 @@ export class BoardView {
         this._imageButton.set_position(150, 98);
         this._imageButton.connect('clicked', () => this._chooseImage());
         this._root.add_child(this._imageButton);
+
+        this._dropButton = new St.Button({
+            label: '⇩ THẢ ẢNH',
+            reactive: true,
+            can_focus: true,
+            style_class: 'evidence-create-button evidence-image-button',
+        });
+        this._dropButton.set_position(244, 98);
+        this._dropButton.connect('clicked', () => this._openDropWindow());
+        this._root.add_child(this._dropButton);
         this._resize();
         this._setStatus('Đang kết nối backend…');
 
@@ -332,6 +346,142 @@ export class BoardView {
         }
     }
 
+    async _openDropWindow() {
+        if (!this._service || !this._alive) {
+            this._setStatus('BACKEND OFFLINE · không thể thả ảnh');
+            return;
+        }
+        if (this._dropProcess)
+            return;
+        const helper = GLib.build_filenamev([
+            GLib.get_user_data_dir(), 'gnome-shell', 'extensions',
+            'evidence-note-board@mujin0422.github.io', 'image-drop-target.py',
+        ]);
+        if (!GLib.file_test(helper, GLib.FileTest.IS_REGULAR)) {
+            this._setStatus('Thiếu image-drop-target.py · cài lại extension');
+            return;
+        }
+        try {
+            const process = Gio.Subprocess.new(
+                ['python3', helper],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
+            );
+            this._dropProcess = process;
+            this._setStatus('Kéo ảnh từ Files vào cửa sổ THẢ ẢNH');
+            const [ok, stdout] = await new Promise((resolve, reject) => {
+                process.communicate_utf8_async(null, null, (proc, result) => {
+                    try {
+                        resolve(proc.communicate_utf8_finish(result));
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
+            if (!this._alive || this._dropProcess !== process)
+                return;
+            if (!ok || !process.get_successful())
+                return;
+            const paths = stdout.split('\n').map(path => path.trim()).filter(Boolean);
+            if (paths.length === 0)
+                return;
+            const origin = screenToWorld(this._view, {
+                x: this._root.width / 2,
+                y: this._root.height / 2,
+            });
+            let added = 0;
+            for (const path of paths.slice(0, 12)) {
+                try {
+                    const image = await this._service.importImage(path,
+                        origin.x + 26 * added, origin.y + 26 * added);
+                    if (!this._alive)
+                        return;
+                    this._renderNote(image);
+                    added++;
+                } catch (error) {
+                    console.warn('Evidence Note Board: dropped image import failed', error.message);
+                }
+            }
+            this._setStatus(`PHASE 3 · đã nhập ${added}/${Math.min(paths.length, 12)} ảnh`);
+        } catch (error) {
+            console.warn('Evidence Note Board: GTK drop window failed', error.message);
+            if (this._alive)
+                this._setStatus('LỖI CỬA SỔ THẢ ẢNH · cài python3-gobject gtk4');
+        } finally {
+            this._dropProcess = null;
+        }
+    }
+
+    _duplicatePhoto(note) {
+        if (!this._service || !this._alive)
+            return;
+        const offset = 30;
+        this._service.duplicateImage(note.id, note.x + offset, note.y + offset)
+            .then(copy => {
+                if (this._alive) {
+                    this._renderNote(copy);
+                    this._setStatus('PHASE 3 · đã nhân bản ảnh');
+                }
+            }).catch(error => {
+                console.warn('Evidence Note Board: duplicate failed', error.message);
+                this._setStatus('LỖI NHÂN BẢN ẢNH · xem journalctl');
+            });
+    }
+
+    _rotatePhoto(note, by) {
+        if (!this._service || !this._alive)
+            return;
+        const before = note.rotation;
+        note.rotation = rotateBy(note.rotation, by);
+        this._applyGeometry(note);
+        this._service.updateGeometry(note.id, note.width, note.height, note.rotation)
+            .catch(error => {
+                note.rotation = before;
+                this._applyGeometry(note);
+                console.warn('Evidence Note Board: rotate failed', error.message);
+                this._saveError();
+            });
+    }
+
+    _startResize(event, note) {
+        if (event.get_button() !== 1 || !this._service || !this._beginGrab())
+            return Clutter.EVENT_PROPAGATE;
+        const [x, y] = event.get_coords();
+        this._resizeSession = {note, startX: x, startWidth: note.width, startHeight: note.height};
+        this._dragPoint = {x, y};
+        return Clutter.EVENT_STOP;
+    }
+
+    _applyGeometry(note) {
+        const item = this._notes.get(note.id);
+        if (!item)
+            return;
+        item.actor.set_size(note.width, note.height);
+        if (note.type === 'image') {
+            item.actor.set_pivot_point(0.5, 0.5);
+            item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
+            item.photo?.set_size(Math.max(60, note.width - 24), Math.max(60, note.height - 48));
+            if (item.photo)
+                item.photo.icon_size = Math.round(Math.max(64, note.width - 24));
+        } else if (item.body) {
+            item.body.set_size(Math.max(120, note.width - 32),
+                Math.max(90, note.height - 85));
+        }
+    }
+
+    _syncTextHeight(note) {
+        const item = this._notes.get(note.id);
+        if (!item?.body || !this._alive)
+            return;
+        // The Pango layout reflects wrapped lines at the allocated body width.
+        const [, pixels] = item.body.get_layout().get_pixel_size();
+        const required = requiredPaperHeight(pixels);
+        if (note.height !== required) {
+            note.height = required;
+            this._applyGeometry(note);
+            this._scheduleNote(note.id);
+        }
+    }
+
     _renderImageNote(note) {
         if (!this._alive || this._notes.has(note.id))
             return;
@@ -366,6 +516,18 @@ export class BoardView {
             }).catch(() => this._saveError());
         });
         header.add_child(remove);
+        const rotateLeft = new St.Button({label: '↶', style_class: 'evidence-photo-action'});
+        rotateLeft.connect('clicked', () => this._rotatePhoto(note, -15));
+        header.add_child(rotateLeft);
+        const rotateRight = new St.Button({label: '↷', style_class: 'evidence-photo-action'});
+        rotateRight.connect('clicked', () => this._rotatePhoto(note, 15));
+        header.add_child(rotateRight);
+        const duplicate = new St.Button({label: '⧉', style_class: 'evidence-photo-action'});
+        duplicate.connect('clicked', () => this._duplicatePhoto(note));
+        header.add_child(duplicate);
+        const resize = new St.Label({text: '↘', reactive: true, style_class: 'evidence-resize-handle'});
+        resize.connect('button-press-event', (_actor, event) => this._startResize(event, note));
+        header.add_child(resize);
         paper.add_child(header);
         const photo = new St.Icon({
             gicon: new Gio.FileIcon({file: Gio.File.new_for_path(note.asset_path)}),
@@ -375,8 +537,9 @@ export class BoardView {
         });
         photo.set_size(note.width - 24, note.height - 48);
         paper.add_child(photo);
-        this._notes.set(note.id, {note, actor: paper});
+        this._notes.set(note.id, {note, actor: paper, photo});
         this._world.add_child(paper);
+        this._applyGeometry(note);
     }
 
     _press(event) {
@@ -391,7 +554,7 @@ export class BoardView {
             const uiRects = [
                 {x: 0, y: 0, width: 600, height: 145},
             ];
-            for (const actor of [this._hud, this._createButton, this._imageButton]) {
+            for (const actor of [this._hud, this._createButton, this._imageButton, this._dropButton]) {
                 if (!actor)
                     continue;
                 const [ax, ay] = actor.get_position();
@@ -446,6 +609,22 @@ export class BoardView {
         if (!this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
         const [x, y] = event.get_coords();
+        if (this._resizeSession) {
+            const {note, startX, startWidth, startHeight} = this._resizeSession;
+            if (note.type === 'image') {
+                const size = resizedImage(startWidth, startHeight,
+                    x - startX, this._view.zoom);
+                note.width = size.width;
+                note.height = size.height;
+            } else {
+                note.width = resizedTextWidth(startWidth,
+                    x - startX, this._view.zoom);
+            }
+            this._applyGeometry(note);
+            if (note.type === 'text')
+                this._syncTextHeight(note);
+            return Clutter.EVENT_STOP;
+        }
         const dx = x - this._dragPoint.x;
         const dy = y - this._dragPoint.y;
         if (this._dragNote) {
@@ -465,6 +644,13 @@ export class BoardView {
     _release(event) {
         if (!this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
+        if (this._resizeSession && event.get_button() === 1) {
+            const {note} = this._resizeSession;
+            this._endDrag();
+            this._service?.updateGeometry(note.id, note.width, note.height, note.rotation)
+                .catch(() => this._saveError());
+            return Clutter.EVENT_STOP;
+        }
         if (this._dragNote && event.get_button() === 1) {
             const note = this._dragNote;
             this._endDrag();
@@ -479,6 +665,7 @@ export class BoardView {
     }
 
     _endDrag() {
+        this._resizeSession = null;
         this._dragPoint = null;
         this._dragNote = null;
         this._grab?.dismiss();
@@ -531,6 +718,11 @@ export class BoardView {
             }).catch(() => this._saveError());
         });
         bar.add_child(remove);
+        const resize = new St.Label({
+            text: '↔', reactive: true, style_class: 'evidence-resize-handle',
+        });
+        resize.connect('button-press-event', (_actor, event) => this._startResize(event, note));
+        bar.add_child(resize);
         paper.add_child(bar);
 
         // One editable multiline field directly on the paper: no St.Entry,
@@ -553,7 +745,7 @@ export class BoardView {
         // Fill the paper below the handle, including when initially empty.
         body.set_size(
             Math.max(120, note.width - 32),
-            Math.max(90, note.height - 55)
+            Math.max(90, note.height - 85)
         );
         body.connect('button-press-event', () => {
             global.stage.set_key_focus(body);
@@ -570,9 +762,13 @@ export class BoardView {
             return Clutter.EVENT_PROPAGATE;
         });
 
-        body.connect('notify::text', () => this._scheduleNote(note.id));
+        body.connect('notify::text', () => {
+            this._syncTextHeight(note);
+            this._scheduleNote(note.id);
+        });
         this._notes.set(note.id, {note, actor: paper, body});
         this._world.add_child(paper);
+        this._syncTextHeight(note);
 
         if (focus) {
             global.stage.set_key_focus(body);
@@ -606,6 +802,9 @@ export class BoardView {
         if (!item.body) // Image notes contain no editable text.
             return;
         const content = item.body.get_text();
+        // Persist geometry alongside content, preserving edit ordering.
+        this._service.updateGeometry(id, item.note.width, item.note.height, item.note.rotation)
+            .catch(() => this._saveError());
         // Leave the existing DB schema and D-Bus signature intact while
         // using an empty legacy title for body-only notes.
         this._service.updateNote(id, '', content).catch(() => this._saveError());
@@ -627,6 +826,8 @@ export class BoardView {
         }
         this._imagePicker?.force_exit();
         this._imagePicker = null;
+        this._dropProcess?.force_exit();
+        this._dropProcess = null;
         this._doubleClick.reset();
         this._endDrag();
         for (const id of [...this._timers.keys()])

@@ -22,7 +22,7 @@ if [[ "${XDG_SESSION_TYPE:-}" != "wayland" ]]; then
 fi
 
 mkdir -p "$TARGET"
-for name in metadata.json extension.js boardView.js canvasMath.js noteService.js doubleClickTracker.js noteHitTest.js noteContent.js stylesheet.css; do
+for name in metadata.json extension.js boardView.js canvasMath.js noteService.js doubleClickTracker.js noteHitTest.js noteContent.js geometry.js stylesheet.css image-drop-target.py; do
     install -m 0644 "$ROOT/extension/$name" "$TARGET/$name"
 done
 
