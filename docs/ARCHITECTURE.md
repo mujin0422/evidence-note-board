@@ -98,3 +98,21 @@ Phía compositor không giải mã ảnh nguồn trước khi nhập; GJS chỉ 
 bản sao đã được Rust xác minh. Nút file picker dùng Zenity process không
 block GNOME Shell. Đây chưa phải kiến trúc release cuối cùng; portal
 FileChooser được cân nhắc thay Zenity ở Phase 5.
+
+## Phase 5 production integration update
+
+User settings use XDG_CONFIG_HOME/evidence-note-board/settings.json, not
+SQLite schema modifications. Rust's typed SaveSettings validates data
+and atomically renames a temporary file; GNOME Settings overlay is a
+small St.BoxLayout on the primary monitor.
+
+GNOME layoutManager.monitors and primaryIndex decide toolbar placement
+while note/connection storage remains world-space. On backend loss,
+GJS preserves note actors/dirty content, retries D-Bus with capped
+exponential backoff and persists changes after reconnect.
+
+Wire render is stage-sized St.DrawingArea, throttled redraw and screen
+culling. No GPU frames benchmark is inferred from this approach.
+SQLite backup and SHA-verified asset restore are an explicit CLI workflow,
+not an automatic destructive recovery on app startup. See
+[PHASE_05](phases/PHASE_05.md).

@@ -24,8 +24,9 @@ jobs:
           node --check extension/geometry.js
           node --check extension/pinMath.js
           node --check extension/stringMath.js
+          node --check extension/productionMath.js
       - name: Camera tests
-        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js tests/pinMath.test.js tests/stringMath.test.js
+        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js tests/pinMath.test.js tests/stringMath.test.js tests/productionMath.test.js
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py
@@ -38,7 +39,10 @@ jobs:
           python3 tests/check_phase4_strings.py
           python3 tests/check_phase4_wire_render.py
           python3 tests/check_autostart.py
+          python3 tests/check_phase5.py
+          python3 -m unittest discover -s tests -p 'test_backup.py'
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh scripts/setup-dev.sh
+          node scripts/benchmark-geometry.mjs
       - name: Package
         run: |
           bash scripts/build-extension.sh

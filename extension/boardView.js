@@ -15,6 +15,8 @@ import {PIN_SIZE, pinPosition} from './pinMath.js';
 import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
     from './stringMath.js';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
+import {DEFAULT_PREFERENCES,primaryMonitor,toolbarLayout,curveVisible,reconnectDelay}
+    from './productionMath.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
@@ -26,6 +28,15 @@ export class BoardView {
         this._createButton = null;
         this._imageButton = null;
         this._imagePicker = null;
+        this._settingsButton = null;
+        this._settingsMenu = null;
+        this._preferences = {...DEFAULT_PREFERENCES};
+        this._monitorRect = null;
+        this._dirtyNotes = new Set();
+        this._dirtyView = false;
+        this._reconnectTimer = 0;
+        this._reconnectAttempts = 0;
+        this._paintTimer = 0;
         this._resizeSession = null;
         this._pinMenu = null;
         this._stringsLayer = null;
@@ -103,8 +114,7 @@ export class BoardView {
         });
         this._createButton.set_position(22, 98);
         this._createButton.connect('clicked', () => {
-            const x = this._root?.width / 2;
-            const y = this._root?.height / 2;
+            const {x,y}=toolbarLayout(this._monitorRect).center;
             if (Number.isFinite(x) && Number.isFinite(y))
                 this._createNoteAtScreen(x, y);
         });
@@ -119,6 +129,12 @@ export class BoardView {
         this._imageButton.set_position(150, 98);
         this._imageButton.connect('clicked', () => this._chooseImage());
         this._root.add_child(this._imageButton);
+        this._settingsButton = new St.Button({
+            label: '⚙', reactive: true, can_focus: true,
+            style_class: 'evidence-create-button evidence-settings-button',
+        });
+        this._settingsButton.connect('clicked',()=>this._toggleSettingsMenu());
+        this._root.add_child(this._settingsButton);
 
         this._resize();
         this._setStatus('Đang kết nối backend…');
@@ -156,7 +172,8 @@ export class BoardView {
                 this._connectBackend().catch(error => {
                     if (this._alive) {
                         console.warn('Evidence Note Board: backend connection failed', error.message);
-                        this._setStatus('BACKEND OFFLINE · kiểm tra systemd --user');
+                        this._setStatus('BACKEND OFFLINE · đang thử kết nối lại');
+                        this._scheduleReconnect();
                     }
                 });
             },
@@ -165,6 +182,7 @@ export class BoardView {
                     return;
                 this._connectionRevision++;
                 this._service = null;
+                this._scheduleReconnect();
                 // Preserve existing note actors and unsaved text on screen.
                 this._setStatus('BACKEND OFFLINE · đang chờ tự kết nối lại');
             }
@@ -174,16 +192,23 @@ export class BoardView {
     async _connectBackend() {
         const revision = ++this._connectionRevision;
         const service = await NoteService.connect();
-        const [notes, view, connections] = await Promise.all([
-            service.listNotes(), service.getView(), service.listConnections(),
+        const [notes, view, connections, settings] = await Promise.all([
+            service.listNotes(),service.getView(),service.listConnections(),service.getSettings(),
         ]);
         // A backend restart or extension disable invalidates in-flight RPCs.
         if (!this._alive || revision !== this._connectionRevision)
             return;
         this._service = service;
+        if (this._reconnectTimer) {
+            GLib.Source.remove(this._reconnectTimer);
+            this._reconnectTimer = 0;
+        }
+        this._reconnectAttempts = 0;
+        this._preferences = settings;
+        this._applyPreferences();
         this._connections = new Map(connections.map(c => [c.id, c]));
         this._queueStrings();
-        if (Number.isFinite(view.zoom) && view.zoom >= 0.25 && view.zoom <= 3 &&
+        if (!this._dirtyView && Number.isFinite(view.zoom) && view.zoom >= 0.25 && view.zoom <= 3 &&
             Number.isFinite(view.pan_x) && Number.isFinite(view.pan_y)) {
             this._view = {zoom: view.zoom, panX: view.pan_x, panY: view.pan_y};
         }
@@ -199,10 +224,104 @@ export class BoardView {
                 console.error(error, 'Evidence Note Board: failed to render saved note');
             }
         }
+        for (const id of [...this._dirtyNotes])
+            this._flushNote(id);
+        if (this._dirtyView)
+            this._scheduleView();
         if (failed)
             this._setStatus(`LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`);
         else
             this._setStatus(`P2.4 · SẴN SÀNG · ${restored} ghi chú · double-click hoặc + GHI CHÚ`);
+    }
+
+    _scheduleReconnect() {
+        if (!this._alive || this._reconnectTimer || this._service)
+            return;
+        const delay = reconnectDelay(this._reconnectAttempts++);
+        this._reconnectTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT,delay,()=>{
+            this._reconnectTimer=0;
+            if (!this._alive || this._service)
+                return GLib.SOURCE_REMOVE;
+            this._connectBackend().catch(error=>{
+                if (this._alive) {
+                    console.warn('Evidence Note Board: reconnect failed',error.message);
+                    this._scheduleReconnect();
+                }
+            });
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _applyPreferences() {
+        if (this._hud)
+            this._hud.visible = this._preferences.show_hud;
+        this._queueStrings();
+    }
+
+    _savePreferences(next) {
+        if (!this._service) {
+            this._setStatus('BACKEND OFFLINE · chưa thể lưu SETTINGS');
+            return;
+        }
+        const previous=this._preferences;
+        this._preferences=next;
+        this._applyPreferences();
+        this._closeSettingsMenu();
+        this._service?.saveSettings(next).catch(error=>{
+            console.warn('Evidence Note Board: settings not saved',error.message);
+            this._preferences=previous;
+            this._applyPreferences();
+            this._setStatus('LỖI LƯU SETTINGS');
+        });
+    }
+
+    _closeSettingsMenu() {
+        this._settingsMenu?.destroy();
+        this._settingsMenu=null;
+    }
+
+    _toggleSettingsMenu() {
+        if (this._settingsMenu) {
+            this._closeSettingsMenu();
+            return;
+        }
+        this._closePinMenu();
+        const menu=new St.BoxLayout({
+            reactive:true,orientation:Clutter.Orientation.VERTICAL,
+            style_class:'evidence-settings-menu',
+        });
+        const action=(label,callback)=>{
+            const button=new St.Button({
+                label,can_focus:true,style_class:'evidence-settings-action',
+            });
+            button.connect('clicked',callback);
+            menu.add_child(button);
+        };
+        action(`HUD: ${this._preferences.show_hud?'Hiện':'Ẩn'}`,
+            ()=>this._savePreferences({...this._preferences,
+                show_hud:!this._preferences.show_hud}));
+        action(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
+            ()=>this._savePreferences({...this._preferences,
+                show_strings:!this._preferences.show_strings}));
+        action(`Zoom: ${this._preferences.zoom_step>1.15?'Nhanh':'Vừa'}`,
+            ()=>this._savePreferences({...this._preferences,
+                zoom_step:this._preferences.zoom_step>1.15?1.1:1.25}));
+        action('Zoom 100%',()=>{
+            const m=this._monitorRect;
+            if (m) {
+                this._view=zoomAt(this._view,toolbarLayout(m).center,1);
+                this._applyView();
+                this._scheduleView();
+            }
+            this._closeSettingsMenu();
+        });
+        action('Đóng',()=>this._closeSettingsMenu());
+        menu.set_size(212,240);
+        this._root.add_child(menu);
+        this._settingsMenu=menu;
+        const [x,y]=this._settingsButton.get_position();
+        menu.set_position(Math.max(0,Math.min(this._root.width-216,x-160)),
+            Math.max(0,Math.min(this._root.height-244,y+43)));
     }
 
     _setStatus(message) {
@@ -217,6 +336,15 @@ export class BoardView {
     _resize() {
         if (this._root)
             this._root.set_size(global.stage.width, global.stage.height);
+        const monitor=primaryMonitor(Main.layoutManager.monitors,
+            Main.layoutManager.primaryIndex,global.stage.width,global.stage.height);
+        this._monitorRect=monitor;
+        const c=toolbarLayout(monitor);
+        this._hud?.set_position(c.hud.x,c.hud.y);
+        this._createButton?.set_position(c.text.x,c.text.y);
+        this._imageButton?.set_position(c.image.x,c.image.y);
+        this._settingsButton?.set_position(c.settings.x,c.settings.y);
+        this._closeSettingsMenu();
         if (this._stringsLayer) {
             this._stringsLayer.set_size(global.stage.width, global.stage.height);
             this._queueStrings();
@@ -236,7 +364,10 @@ export class BoardView {
     }
 
     _scheduleView() {
-        if (!this._service || !this._alive)
+        if (!this._alive)
+            return;
+        this._dirtyView=true;
+        if (!this._service)
             return;
         if (this._viewTimer)
             GLib.Source.remove(this._viewTimer);
@@ -251,7 +382,14 @@ export class BoardView {
         if (!this._service)
             return;
         const {zoom, panX, panY} = this._view;
-        this._service.saveView(zoom, panX, panY).catch(() => this._saveError());
+        this._service.saveView(zoom, panX, panY).then(()=>{
+            if (this._alive && this._view.zoom===zoom &&
+                this._view.panX===panX && this._view.panY===panY)
+                this._dirtyView=false;
+        }).catch(()=>{
+            this._dirtyView=true;
+            this._saveError();
+        });
     }
 
     _saveError() {
@@ -265,12 +403,12 @@ export class BoardView {
         const direction = event.get_scroll_direction();
         let factor;
         if (direction === Clutter.ScrollDirection.UP)
-            factor = 1.1;
+            factor = this._preferences.zoom_step;
         else if (direction === Clutter.ScrollDirection.DOWN)
-            factor = 1 / 1.1;
+            factor = 1 / this._preferences.zoom_step;
         else if (direction === Clutter.ScrollDirection.SMOOTH) {
             const [, dy] = event.get_scroll_delta();
-            factor = Math.exp(-dy * 0.13);
+            factor = Math.exp(-dy * Math.log(this._preferences.zoom_step) * 1.36);
         } else {
             return Clutter.EVENT_PROPAGATE;
         }
@@ -349,8 +487,7 @@ export class BoardView {
             if (!selected)
                 return;
             const at = screenToWorld(this._view, {
-                x: this._root.width / 2,
-                y: this._root.height / 2,
+                ...toolbarLayout(this._monitorRect).center,
             });
             this._setStatus('Đang nhập ảnh vào bộ nhớ cục bộ…');
             const note = await this._service.importImage(selected, at.x, at.y);
@@ -592,7 +729,14 @@ export class BoardView {
     }
 
     _queueStrings() {
-        this._stringsLayer?.queue_repaint();
+        if (!this._alive || !this._stringsLayer || this._paintTimer)
+            return;
+        this._paintTimer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,16,()=>{
+            this._paintTimer=0;
+            if (this._alive)
+                this._stringsLayer?.queue_repaint();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _paintStrings(area) {
@@ -610,11 +754,18 @@ export class BoardView {
                 cr.stroke();
             };
             const project = point => worldToScreen(this._view, point);
+            if (!this._preferences.show_strings)
+                return;
+            const viewport={width:area.width,height:area.height};
             for (const edge of this._connections.values()) {
                 const a = this._notes.get(edge.source_note_id)?.note;
                 const b = this._notes.get(edge.target_note_id)?.note;
-                if (a && b)
-                    draw(project(pinCenter(a)), project(pinCenter(b)));
+                if (a && b) {
+                    const from=project(pinCenter(a));
+                    const to=project(pinCenter(b));
+                    if (curveVisible(from,to,viewport))
+                        draw(from,to);
+                }
             }
             if (this._stringDraft) {
                 const start = this._notes.get(this._stringDraft.sourceId)?.note;
@@ -713,7 +864,10 @@ export class BoardView {
             const uiRects = [
                 {x: 0, y: 0, width: 420, height: 145},
             ];
-            for (const actor of [this._hud, this._createButton, this._imageButton]) {
+            for (const actor of [
+                this._hud,this._createButton,this._imageButton,
+                this._settingsButton,this._settingsMenu,
+            ]) {
                 if (!actor)
                     continue;
                 const [ax, ay] = actor.get_position();
@@ -1028,7 +1182,10 @@ export class BoardView {
     }
 
     _scheduleNote(id) {
-        if (!this._service || !this._alive)
+        if (!this._alive)
+            return;
+        this._dirtyNotes.add(id);
+        if (!this._service)
             return;
         this._cancelNoteTimer(id);
         const source = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
@@ -1052,7 +1209,13 @@ export class BoardView {
             .catch(() => this._saveError());
         // Leave the existing DB schema and D-Bus signature intact while
         // using an empty legacy title for body-only notes.
-        this._service.updateNote(id, '', content).catch(() => this._saveError());
+        this._service.updateNote(id, '', content).then(()=>{
+            if (this._alive && item.body?.get_text()===content)
+                this._dirtyNotes.delete(id);
+        }).catch(()=>{
+            this._dirtyNotes.add(id);
+            this._saveError();
+        });
     }
 
     _cancelNoteTimer(id) {
@@ -1067,6 +1230,13 @@ export class BoardView {
         this._closePinMenu();
         this._deletingNotes.clear();
         this._connections.clear();
+        if (this._paintTimer)
+            GLib.Source.remove(this._paintTimer);
+        this._paintTimer=0;
+        if (this._reconnectTimer)
+            GLib.Source.remove(this._reconnectTimer);
+        this._reconnectTimer=0;
+        this._closeSettingsMenu();
         this._stringsLayer = null;
         this._alive = false;
         this._connectionRevision++;
@@ -1105,6 +1275,7 @@ export class BoardView {
         this._hud = null;
         this._createButton = null;
         this._imageButton = null;
+        this._settingsButton = null;
         this._service = null;
         this._backgroundGroup = null;
     }

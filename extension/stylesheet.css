@@ -148,3 +148,18 @@
 .evidence-pin-menu {
     spacing: 2px;
 }
+
+.evidence-settings-button {
+    background-color:#3a3330; border-color:#6c6053;
+    padding-left:13px; padding-right:13px;
+}
+.evidence-settings-menu {
+    background-color:#24201c; border:1px solid #88735c;
+    border-radius:5px; padding:9px; spacing:4px;
+    box-shadow:0 8px 22px rgba(0,0,0,0.65);
+}
+.evidence-settings-action {
+    color:#e9dac1; background-color:#49392f;
+    border:1px solid #6d5844; border-radius:3px; padding:6px 10px;
+}
+.evidence-settings-action:hover {background-color:#6b4a37;}

@@ -11,7 +11,10 @@ assert "this._root.set_child_below_sibling(this._stringsLayer, this._world)" in 
 assert "this._world.add_child(this._stringsLayer)" not in js
 assert "this._stringsLayer.set_size(4000, 3000)" not in js
 assert "this._stringsLayer.set_size(global.stage.width, global.stage.height)" in js
-assert "draw(project(pinCenter(a)), project(pinCenter(b)))" in js
+assert "const from=project(pinCenter(a));" in js
+assert "const to=project(pinCenter(b));" in js
+assert "curveVisible(from,to,viewport)" in js
+assert "draw(from,to)" in js
 assert "project(this._stringDraft.target)" in js
 assert "this._queueStrings();" in js
 assert "red string repaint failed" in js
