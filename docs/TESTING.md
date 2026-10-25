@@ -90,20 +90,10 @@ xem [PHASE_02](phases/PHASE_02.md).
 ## Phase 3 — Image note test plan
 
 Xem [PHASE_03](phases/PHASE_03.md). Kiểm tra Rust test import/tồn tại sau
-restart/xóa bản sao file + source untouched, Python static và kiểm thử
+restart/xóa file asset + source untouched, Python static và kiểm thử
 Fedora GNOME Classic 50.5 thực tế. Ảnh PNG/JPEG/WebP, đường dẫn có dấu
 tiếng Việt, cancel chọn ảnh, asset size-limit, kéo/xóa/relogin; so sánh
 note cũ Phase 2 không thay đổi.
-
-## Regression bổ sung Phase 3
-
-`tests/geometry.test.js`: ranh giới kích thước và zoom; tỉ lệ resize
-ảnh; thay đổi chiều cao text; góc xoay.
-
-`tests/check_phase3_interactions.py`: kiểm tra có trình nhận file GTK4,
-nhân bản assets, các điều khiển resize/rotate/duplicate và đo Pango.
-`python3 -m py_compile extension/image-drop-target.py` kiểm tra cú pháp.
-Chỉ nghiệm thu giao diện kéo-thả trên Fedora thật với Nautilus.
 
 ## Phase 3 mới — kiểm tra loại bỏ các nút và giữ tỉ lệ ảnh
 
