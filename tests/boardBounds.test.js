@@ -47,3 +47,13 @@ test('safe clickable region rejects points beyond desktop',()=>{
     assert.ok(!validBoardPoint({x:1920,y:20},1920,1080));
     assert.ok(!validBoardPoint({x:-1,y:20},1920,1080));
 });
+
+test('oversized photos preserve the underlying image aspect when fitted',()=>{
+    const huge={...photo,width:1180,height:850,x:800,y:700};
+    const small=confineNote(huge,900,650);
+    within(small,900,650);
+    const oldRatio=(huge.height-48)/(huge.width-24);
+    const newRatio=(small.height-48)/(small.width-24);
+    assert.ok(Math.abs(newRatio-oldRatio)<0.02,
+        'photo content ratio must survive shrinking');
+});

@@ -37,8 +37,17 @@ export function confineNote(note, viewportWidth, viewportHeight, zoom = 1, margi
         const ratio = Math.min(maxW / Math.max(w, 1), maxH / Math.max(h, 1), 0.98);
         const minWidth = fixed.type === 'image' ? 180 : 200;
         const minHeight = fixed.type === 'image' ? 110 : 185;
-        const width = Math.max(minWidth, Math.floor(fixed.width * ratio));
-        const height = Math.max(minHeight, Math.floor(fixed.height * ratio));
+        // Keep Polaroid photo aspect stable while shrinking the frame:
+        // horizontal and vertical paper padding are not photo pixels.
+        let width = Math.max(minWidth, Math.floor(fixed.width * ratio));
+        let height;
+        if (fixed.type === 'image') {
+            const photoRatio = Math.max(1, fixed.height - 48) /
+                Math.max(1, fixed.width - 24);
+            height = Math.max(minHeight, Math.round(48 + (width - 24) * photoRatio));
+        } else {
+            height = Math.max(minHeight, Math.floor(fixed.height * ratio));
+        }
         if (width === fixed.width && height === fixed.height)
             break;
         fixed = {...fixed, width, height};
