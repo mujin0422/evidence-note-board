@@ -113,3 +113,46 @@ Following on-device installation feedback:
   at stage center.
 - No changes to `evidence.db`, image assets, red strings or saved settings.
   After installing updated GNOME JS on Wayland, logout/login once.
+
+
+## 26/10/2026 — Gesture-driven, bounded board (Draft PR)
+
+Theo yêu cầu mới, Phase 5 giới hạn vào **một board trên một màn hình**:
+
+1. Double-click vùng trống → tạo giấy chữ.
+2. Ctrl + double-click vùng trống → mở Zenity file chooser nhập ảnh.
+   Bộ đếm nhấp đúp phân biệt phím Ctrl để tránh trộn hai thao tác.
+3. Bỏ hai nút tạo nội dung. Giữ chuột trái và kéo pin hoặc vùng mép
+   giấy/ảnh để di chuyển. Vùng giữa note chữ vẫn dành cho editor.
+4. Bỏ panning chuột giữa và mọi offset camera pan. Saved view cũ có
+   panX/panY được chuẩn hóa về 0 khi tải; vẫn cho Ctrl+Wheel zoom
+   nhưng chặn zoom-in nếu note/pin sẽ ra ngoài viewport.
+5. Giới hạn bounding box thực của giấy **sau khi xoay** và của pin
+   trong viewport cho thao tác kéo, resize, tự tăng chiều cao,
+   tạo mới và khôi phục note cũ. Nếu note cũ quá lớn, co hình
+   giấy để giữ trong board; không thay đổi nội dung text/asset.
+6. Settings chỉ còn HUD, dây đỏ, **Zoom 100%** và Đóng; loại lựa chọn
+   tốc độ zoom. Không sửa schema settings cũ; giữ tương thích backend.
+7. Không dùng multi-monitor, không thay đổi Rust SQLite data format.
+
+### Nghiệm thu trên Fedora Wayland
+
+- [ ] Double-click vùng trống → đúng 1 text note
+- [ ] Ctrl+double-click vùng trống → cửa sổ chọn ảnh → đúng 1 ảnh
+- [ ] Nhấn Ctrl một lần và nhấn thường một lần không tạo nhầm
+- [ ] Không còn nút + GHI CHÚ/+ ẢNH hoặc pan bằng chuột giữa
+- [ ] Giữ pin/mép giấy rồi kéo các góc; không vượt board và thả ngay
+- [ ] Resize note, ảnh dọc/ngang; xoay ảnh với các góc khác nhau;
+      cạnh giấy và pin luôn nhìn thấy
+- [ ] Note có hàng trăm dòng không mất chữ; giấy bị giới hạn chiều cao
+      trong board khi quá dài
+- [ ] Ctrl+Wheel zoom-in không đẩy note khỏi màn hình; nút Settings
+      Zoom 100% khôi phục mọi giấy/ảnh trong board
+- [ ] Restart/logout/login: giấy/ảnh và red strings còn, vị trí
+      ngoài màn hình từ database cũ được đưa lại an toàn
+- [ ] D-Bus service tự chạy; không có JS ERROR và không cản ứng dụng khác
+
+**Giới hạn:** việc giữ toàn bộ nội dung note rất dài hiển thị đồng thời
+trên một màn hình có kích thước cố định là không thể; bản này giữ toàn
+bộ text trong SQLite và chặn chiều cao giấy ở mép board. Zoom >100%
+có thể bị chặn khi board chứa các note gần biên.

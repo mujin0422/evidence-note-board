@@ -34,3 +34,17 @@ test('reset clears earlier click and does not create a note', () => {
     tracker.reset();
     assert.equal(tracker.register(1100, 20, 20), false);
 });
+
+test('Ctrl double click selects only image action, never text action',()=>{
+    const tracker=new DoubleClickTracker();
+    assert.equal(tracker.register(1000,100,100,'image'),false);
+    assert.equal(tracker.register(1100,102,101,'image'),true);
+    assert.equal(tracker.register(1200,102,101,'text'),false);
+    assert.equal(tracker.register(1300,104,102,'text'),true);
+});
+test('mixed Ctrl/plain clicks cannot create a note or image accidentally',()=>{
+    const tracker=new DoubleClickTracker();
+    assert.equal(tracker.register(1000,100,100,'image'),false);
+    assert.equal(tracker.register(1100,100,100,'text'),false);
+    assert.equal(tracker.register(1200,100,100,'image'),false);
+});

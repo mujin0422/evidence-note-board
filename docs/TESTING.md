@@ -141,3 +141,15 @@ Nghiệm thu hiển thị bắt buộc thử GNOME Wayland thực tế.
 - Fedora GNOME Classic 50.5 Wayland: use the checklist in
   [PHASE_05](phases/PHASE_05.md) for single-screen, crash recovery,
   Settings persistence and interactive performance.
+
+
+## Phase 5 — Gesture bounds and editor safety
+
+- \`tests/boardBounds.test.js\` kiểm tra giới hạn giấy xoay/pin, nhập
+  ghi chú ngoài biên, zoom 25%, note dài không mất text.
+- \`tests/doubleClickTracker.test.js\` kiểm tra hai mode Ctrl/plain
+  không thể trộn lẫn trong cùng một double-click.
+- \`tests/check_board_interactions.py\`: hợp đồng nguồn, đã bỏ
+  pan/nút tạo, Settings chỉ Zoom 100%, đúng bộ cài extension.
+- **Phải thử Fedora GNOME Classic Wayland**: pointer capture, editor,
+  Ctrl+doubleclick, resize/rotate, dữ liệu đã có, DPI và logout/login.
