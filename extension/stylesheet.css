@@ -76,3 +76,66 @@
 .evidence-photo-image {
     background-color: transparent;
 }
+
+/* Phase 4 custom pushpin: layered GNOME St actors, not an emoji. */
+.evidence-pin-hit-area {
+    background-color: transparent;
+    border: none;
+}
+.evidence-pin-stem {
+    background-color: #aaa399;
+    border: 1px solid #403a37;
+    border-radius: 2px;
+}
+.evidence-pin-shadow {
+    background-color: rgba(0, 0, 0, 0.55);
+    border-radius: 99px;
+    box-shadow: 1px 3px 4px rgba(0, 0, 0, 0.65);
+}
+.evidence-pin-metal {
+    background-color: #b6a68a;
+    border: 2px solid #54483b;
+    border-radius: 99px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.evidence-pin-head {
+    background-gradient-direction: vertical;
+    background-gradient-start: #ed5752;
+    background-gradient-end: #7a161c;
+    border: 1px solid #5e161c;
+    border-radius: 99px;
+    box-shadow: inset 0 1px 2px rgba(255, 219, 195, 0.38);
+}
+.evidence-pin-glint {
+    background-color: rgba(255, 233, 208, 0.82);
+    border-radius: 99px;
+}
+.evidence-pin-menu {
+    background-color: #25201d;
+    border: 1px solid #88735c;
+    border-radius: 5px;
+    box-shadow: 0 9px 22px rgba(0, 0, 0, 0.75);
+    padding: 11px;
+    spacing: 5px;
+    min-width: 150px;
+}
+.evidence-pin-menu-title {
+    color: #cabda6;
+    font-size: 10px;
+    font-weight: bold;
+}
+.evidence-pin-delete, .evidence-pin-cancel {
+    color: #eee3d1;
+    background-color: #47392f;
+    border: 1px solid #6a4c3f;
+    border-radius: 3px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+.evidence-pin-delete:confirm {
+    background-color: #912a2b;
+    border-color: #c24646;
+}
+.evidence-pin-cancel {
+    background-color: transparent;
+}
