@@ -33,20 +33,6 @@
     font-weight: bold;
     padding: 0 6px;
 }
-.evidence-edit-title,
-.evidence-edit-title:focus,
-.evidence-edit-title:hover {
-    color: #443628;
-    background-color: transparent;
-    background-image: none;
-    border: none;
-    border-image: none;
-    box-shadow: none;
-    padding: 0;
-    font-size: 16px;
-    font-weight: bold;
-}
-
 .evidence-create-button {
     color: #f1e9d2;
     background-color: #7f1d1d;

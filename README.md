@@ -18,7 +18,7 @@
 ## Chức năng của source Phase 2
 
 - Double-click vào **khoảng trống board**: tạo text note trong SQLite.
-- Sửa title (một dòng) và body (nhiều dòng, Unicode); tự lưu theo debounce.
+- Ghi chú chỉ có **một vùng nội dung nhiều dòng**, không ô tiêu đề, không viền hoặc nền nhập liệu khác màu giấy; tự lưu sau debounce.
 - Kéo bằng thanh tiêu đề; di chuyển và lưu vị trí note.
 - Xóa note: nhấn `×` rồi xác nhận `Xóa?`.
 - Zoom bằng `Ctrl + Wheel`, pan bằng `Middle Mouse Drag`; lưu camera.
@@ -33,7 +33,7 @@ Không có ảnh, dây đỏ, Undo, resize, multiple boards hay RPM trong Phase 
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
 git fetch origin
-git switch --track origin/feat/phase2-text-notes-persistence
+git switch --track origin/fix/phase2-body-only-notes
 bash scripts/install-backend-dev.sh
 bash scripts/install-dev.sh
 ```
@@ -98,3 +98,19 @@ với một actor duy nhất. Editor body hỗ trợ Enter xuống dòng,
 Không có thay đổi schema/backend. Cài lại qua `bash scripts/install-dev.sh`,
 đăng xuất/đăng nhập để GNOME Wayland nạp module mới; xem
 [docs/phases/PHASE_02.md](docs/phases/PHASE_02.md).
+
+## P2.4 — Ghi chú chỉ có nội dung (không còn title)
+
+Theo yêu cầu giao diện mới, mọi tờ giấy chỉ có phần ghim/kéo, nút xóa và
+**một vùng nhập nội dung nhiều dòng trực tiếp trên nền giấy**, không còn
+`St.Entry` tiêu đề. Nhấp vào giấy hoặc dùng nút thêm để nhập ngay.
+Backend Rust/SQLite và D-Bus hiện tại giữ nguyên.
+
+**Tương thích dữ liệu cũ:** title tự động `Ghi chú mới` sẽ không chiếm chỗ
+trên giấy. Những title người dùng đã sửa sẽ được ghép vào đầu content
+và được lưu lại bằng API `UpdateNote(id, '', content)` để không mất dữ liệu.
+Xem [Phase 2](docs/phases/PHASE_02.md) và [Testing](docs/TESTING.md).
+
+Nếu đang thử PR chưa merge, checkout `fix/phase2-body-only-notes`, chạy
+`bash scripts/install-dev.sh`, đăng xuất/đăng nhập Wayland rồi bật lại
+extension. Không cần xóa database hay build lại Rust.

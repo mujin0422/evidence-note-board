@@ -9,6 +9,7 @@ import {panBy, screenToWorld, zoomAt} from './canvasMath.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
+import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
@@ -130,7 +131,7 @@ export class BoardView {
         if (failed)
             this._setStatus(`LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`);
         else
-            this._setStatus(`P2.1 · SẴN SÀNG · ${restored} ghi chú · double-click hoặc + GHI CHÚ`);
+            this._setStatus(`P2.4 · SẴN SÀNG · ${restored} ghi chú · double-click hoặc + GHI CHÚ`);
     }
 
     _setStatus(message) {
@@ -211,7 +212,7 @@ export class BoardView {
         }
         const at = screenToWorld(this._view, {x, y});
         this._setStatus('Đang tạo ghi chú…');
-        this._service.createNote('Ghi chú mới', '', at.x, at.y)
+        this._service.createNote('', '', at.x, at.y)
             .then(note => {
                 if (!this._alive)
                     return;
@@ -219,8 +220,8 @@ export class BoardView {
                 // be reported as a failed save (otherwise users create
                 // multiple invisible records by retrying).
                 try {
-                    this._renderNote(note);
-                    this._setStatus('P2.1 · ĐÃ LƯU & HIỂN THỊ GHI CHÚ');
+                    this._renderNote(note, true);
+                    this._setStatus('P2.4 · ĐÃ TẠO GHI CHÚ · nhập trực tiếp trên giấy');
                 } catch (error) {
                     console.error(error, 'Evidence Note Board: saved note but rendering failed');
                     this._setStatus('ĐÃ LƯU NHƯNG LỖI HIỂN THỊ · xem journalctl');
@@ -338,9 +339,10 @@ export class BoardView {
         this._grab = null;
     }
 
-    _renderNote(note) {
+    _renderNote(note, focus = false) {
         if (!this._alive || this._notes.has(note.id))
             return;
+
         const paper = new St.BoxLayout({
             reactive: true,
             orientation: Clutter.Orientation.VERTICAL,
@@ -349,13 +351,24 @@ export class BoardView {
         paper.set_size(note.width, note.height);
         paper.set_position(note.x, note.y);
 
-        const bar = new St.BoxLayout({reactive: true, style_class: 'evidence-note-header'});
-        const handle = new St.Label({
-            text: '●  KÉO ĐỂ DI CHUYỂN', reactive: true, style_class: 'evidence-note-handle',
+        // The pin/drag handle remains separate from the editable paper area.
+        const bar = new St.BoxLayout({
+            reactive: true,
+            style_class: 'evidence-note-header',
         });
-        handle.connect('button-press-event', (_actor, event) => this._startNoteDrag(event, note));
+        const handle = new St.Label({
+            text: '●  KÉO ĐỂ DI CHUYỂN',
+            reactive: true,
+            style_class: 'evidence-note-handle',
+        });
+        handle.connect('button-press-event',
+            (_actor, event) => this._startNoteDrag(event, note));
         bar.add_child(handle);
-        const remove = new St.Button({label: '×', style_class: 'evidence-delete'});
+
+        const remove = new St.Button({
+            label: '×',
+            style_class: 'evidence-delete',
+        });
         remove.connect('clicked', () => {
             if (remove.label !== 'Xóa?') {
                 remove.set_label('Xóa?');
@@ -372,42 +385,57 @@ export class BoardView {
         bar.add_child(remove);
         paper.add_child(bar);
 
-        const title = new St.Entry({
-            text: note.title, can_focus: true, style_class: 'evidence-edit-title',
-        });
-        title.clutter_text.set_single_line_mode(true);
-        paper.add_child(title);
-
-        // Clutter.Text supports multiline Unicode editing in GNOME Shell.
-        // Clutter.Color was removed in Mutter/GNOME 47. GNOME 50
-        // Clutter.Text color is a Cogl.Color boxed value.
-        // Build the editor before attaching it to the scene graph.
+        // One editable multiline field directly on the paper: no St.Entry,
+        // CSS textbox, title row or visually separate editor background.
+        // Previously saved titles are shown as body text until migrated.
         const ink = new Cogl.Color();
         ink.init_from_4f(81 / 255, 72 / 255, 55 / 255, 1.0);
         const body = new Clutter.Text({
-            text: note.content,
+            text: bodyTextForNote(note),
             reactive: true,
             editable: true,
             selectable: true,
-            activatable: false,
+            cursor_visible: true,
             single_line_mode: false,
+            activatable: false,
             line_wrap: true,
             line_wrap_mode: Pango.WrapMode.WORD_CHAR,
             color: ink,
         });
-        body.set_size(228, 92);
-        // Clutter.Text needs explicit keyboard focus in the desktop layer.
-        // Keep propagation so its own handler can position the text cursor.
+        // Fill the paper below the handle, including when initially empty.
+        body.set_size(
+            Math.max(120, note.width - 32),
+            Math.max(90, note.height - 55)
+        );
         body.connect('button-press-event', () => {
-            body.grab_key_focus();
+            global.stage.set_key_focus(body);
             return Clutter.EVENT_PROPAGATE;
         });
         paper.add_child(body);
-        title.clutter_text.connect('notify::text', () => this._scheduleNote(note.id));
-        body.connect('notify::text', () => this._scheduleNote(note.id));
+        // Clicking unoccupied paper padding should also focus the editor.
+        paper.connect('button-press-event', (_actor, event) => {
+            if (event.get_button() === 1 && event.get_source() === paper) {
+                global.stage.set_key_focus(body);
+                body.set_cursor_position(-1);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
 
-        this._notes.set(note.id, {note, actor: paper, title, body});
+        body.connect('notify::text', () => this._scheduleNote(note.id));
+        this._notes.set(note.id, {note, actor: paper, body});
         this._world.add_child(paper);
+
+        if (focus) {
+            global.stage.set_key_focus(body);
+            body.set_cursor_position(-1);
+        }
+
+        // Compat with the previously deployed two-column SQLite model.
+        // Never discard a user's old title. Debounce saves it to content,
+        // clears title and keeps the same note ID without a DB migration.
+        if (hasLegacyTitle(note))
+            this._scheduleNote(note.id);
     }
 
     _scheduleNote(id) {
@@ -427,9 +455,10 @@ export class BoardView {
         const item = this._notes.get(id);
         if (!item || !this._service)
             return;
-        const title = item.title.get_text();
         const content = item.body.get_text();
-        this._service.updateNote(id, title, content).catch(() => this._saveError());
+        // Leave the existing DB schema and D-Bus signature intact while
+        // using an empty legacy title for body-only notes.
+        this._service.updateNote(id, '', content).catch(() => this._saveError());
     }
 
     _cancelNoteTimer(id) {
