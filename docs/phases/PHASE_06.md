@@ -1,8 +1,11 @@
 # Phase 06 — Fedora Distribution & Release
 
-**Implementation:** in `feat/phase6-fedora-rpm-release` Draft PR.
-**Not yet released:** no `v0.2.0` tag or public GitHub Release is
-created by this PR. RPM on actual GNOME Classic desktop needs testing.
+**Implementation:** Phase 6 PR #26 and backup test fix PR #27 merged into `dev`;
+the Fedora 44 RPM built and passed packaging tests on the owner's machine.
+**Install acceptance:** Fedora RPM `0.2.0-1.fc44`, user backend active and
+enabled, GNOME Extension ACTIVE at the system `/usr/share` path.
+**Not yet released:** no `v0.2.0` tag or public GitHub Release.
+Desktop workflows, upgrade and uninstall still require final validation.
 
 ## Deliverables
 
@@ -19,8 +22,9 @@ created by this PR. RPM on actual GNOME Classic desktop needs testing.
       permissions; release notes and upload of RPM, SRPM, ZIP, checksums
 - [x] Installation, upgrade, uninstall and dev→RPM migration instructions
 - [x] `scripts/backup-board.py` kept for non-destructive user backups
-- [ ] CI real Fedora RPM job green on final PR SHA
-- [ ] Verified installation on Fedora 44 GNOME Classic 50.x Wayland
+- [x] CI Fedora RPM job green for merged packaging and backup-test PRs
+- [x] Verified RPM installed and GNOME extension ACTIVE on Fedora 44
+      (owner terminal log, 26/10/2026; functional smoke test still pending)
 - [ ] Verified existing dev installation does not override system files
 - [ ] Verified upgrade and uninstall preserve existing SQLite and assets
 - [ ] User intentionally creates `v0.2.0` tag, GitHub Release contains files
@@ -61,3 +65,16 @@ Do **not** publish before all checks above are complete.
 CI build note: Fedora container checkouts that do not expose .git to subprocesses
 use a source-only tar fallback excluding build artifacts, while local builds
 with a usable Git repository use a committed git archive.
+
+## Phase 6 finishing polish
+
+- GNOME extension metadata uses a release-ready name, `Evidence Note
+  Board`, instead of the obsolete `(Phase 4)` label, and no longer
+  describes the production RPM as `Experimental`.
+- Updated GNOME extension metadata version to `18` (independent of
+  app RPM version `0.2.0`).
+- Removed duplicate `extension/README.md` from `%doc` because Fedora
+  RPM flattened it to the same destination as project `README.md`.
+- These cosmetic changes do not alter backend, settings, SQLite or
+  existing pinned notes. Local RPM testers should rebuild and use
+  `dnf reinstall` when using the same pre-release RPM NEVRA.
