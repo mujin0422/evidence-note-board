@@ -26,10 +26,28 @@ class BackupRestoreTests(unittest.TestCase):
                 """)
                 conn.execute("INSERT INTO assets VALUES(?,?)",
                     ("a.png",hashlib.sha256(image).hexdigest()))
-            env={**os.environ,"XDG_DATA_HOME":str(base)}
-            def cmd(*args,expect=0):
+            # Mock ONLY the systemctl executable used by test subprocesses.
+            # A real GNOME desktop may have the actual user service active;
+            # this fixture must never query/stop/modify that real service.
+            # Production backup-board.py still rejects restore while active.
+            test_bin=Path(temp)/"test-bin"
+            test_bin.mkdir()
+            systemctl=test_bin/"systemctl"
+            systemctl.write_text("""#!/bin/sh
+if [ "$1" != "--user" ] || [ "$2" != "is-active" ] || \
+   [ "$3" != "--quiet" ] || \
+   [ "$4" != "evidence-note-board.service" ]; then exit 99; fi
+if [ "${ENB_TEST_SYSTEMCTL_ACTIVE:-0}" = "1" ]; then exit 0; fi
+exit 3
+""", encoding="utf-8")
+            systemctl.chmod(0o755)
+            env={**os.environ,"XDG_DATA_HOME":str(base),
+                "PATH":str(test_bin)+os.pathsep+os.environ.get("PATH","")}
+            def cmd(*args,expect=0,service_active=False):
+                local_env={**env,
+                    "ENB_TEST_SYSTEMCTL_ACTIVE":"1" if service_active else "0"}
                 result=subprocess.run([sys.executable,str(SCRIPT),*args],
-                    env=env,capture_output=True,text=True)
+                    env=local_env,capture_output=True,text=True)
                 self.assertEqual(result.returncode,expect,
                     msg=result.stdout+result.stderr)
                 return result
@@ -39,6 +57,14 @@ class BackupRestoreTests(unittest.TestCase):
             (live/"assets"/"a.png").write_bytes(b"changed")
             self.assertEqual(cmd("verify",str(live),expect=1).returncode,1)
             cmd("restore",str(output),expect=2)
+            # Safety regression: a running backend MUST block restore even
+            # with --confirm. It must not touch the live DB/assets.
+            blocked=cmd("restore",str(output),"--confirm",
+                service_active=True,expect=1)
+            self.assertIn("Stop evidence-note-board.service",blocked.stderr)
+            self.assertEqual((live/"assets"/"a.png").read_bytes(),b"changed")
+            self.assertFalse((live/"restore-rollback").exists())
+            # Once the mocked service is inactive, restore proceeds safely.
             cmd("restore",str(output),"--confirm")
             cmd("verify",str(live))
             self.assertEqual((live/"assets"/"a.png").read_bytes(),image)
