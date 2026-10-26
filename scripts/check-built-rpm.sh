@@ -3,8 +3,8 @@
 set -euo pipefail
 DIR="${1:-dist}"
 shopt -s nullglob
-rpms=("$DIR"/*.x86_64.rpm)
-srpms=("$DIR"/*.src.rpm)
+rpms=("$DIR"/evidence-note-board-[0-9]*.x86_64.rpm)
+srpms=("$DIR"/evidence-note-board-[0-9]*.src.rpm)
 if (( ${#rpms[@]} != 1 || ${#srpms[@]} != 1 )); then
     echo "Expected one binary and one source RPM" >&2
     exit 1
