@@ -34,6 +34,7 @@ contains(spec,f"Version:        {version}","License:        MIT",
     "%systemd_user_preun evidence-note-board.service",
     "%systemd_user_postun_with_restart evidence-note-board.service")
 assert "cargo_generate_buildrequires" not in spec
+assert "%doc README.md extension/README.md" not in spec
 assert "cargo-rpm-macros" not in spec
 assert cargo["package"]["license"]=="MIT"
 assert cargo["features"]["default"]==["bundled-sqlite"]

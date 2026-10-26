@@ -9,6 +9,9 @@ meta = json.loads((ext / "metadata.json").read_text(encoding="utf-8"))
 
 assert meta["uuid"] == "evidence-note-board@mujin0422.github.io"
 assert meta["shell-version"] == ["50"]
+assert meta["name"] == "Evidence Note Board"
+assert "Experimental" not in meta["description"]
+assert meta["version"] >= 18
 assert "#111111" in (ext / "stylesheet.css").read_text(encoding="utf-8")
 
 required = {

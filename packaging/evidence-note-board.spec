@@ -80,7 +80,8 @@ bash -n scripts/*.sh
 
 %files
 %license LICENSE
-%doc README.md extension/README.md docs/ARCHITECTURE.md docs/INSTALLATION.md
+# Avoid two README.md basenames sharing the same RPM doc destination.
+%doc README.md docs/ARCHITECTURE.md docs/INSTALLATION.md
 %{_bindir}/evidence-note-boardd
 %{_bindir}/evidence-note-board-backup
 %{_userunitdir}/evidence-note-board.service
