@@ -6,8 +6,8 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {screenToWorld,boardDimensions,clampBoardCamera,zoomBoardAt}
-    from './canvasMath.js';
+import {screenToWorld,boardDimensions,clampBoardCamera,zoomBoardAt,
+    boardDragHasStarted,dragBoardView} from './canvasMath.js';
 import {TEXT_HOLD_MS, keepTextHold} from './holdDrag.js';
 import {confineNote, validBoardPoint} from './boardBounds.js';
 import {NoteService} from './noteService.js';
@@ -53,6 +53,7 @@ export class BoardView {
         this._grab = null;
         this._dragPoint = null;
         this._dragNote = null;
+        this._boardPan = null;
         this._textHold = null;
         this._view = {...INITIAL_VIEW};
         this._boardSize = {width:8000,height:6000};
@@ -388,7 +389,7 @@ export class BoardView {
         this._world.set_scale(this._view.zoom,this._view.zoom);
         this._world.set_position(this._view.panX,this._view.panY);
         if (this._service)
-            this._setStatus('Ctrl+Wheel: zoom board · giữ/kéo pin hoặc mép giấy');
+            this._setStatus('Ctrl+Wheel: zoom · kéo nền trống: di chuyển khung nhìn');
         this._positionPinMenu();
         this._queueStrings();
     }
@@ -983,13 +984,65 @@ export class BoardView {
         const mode=event.get_state() & Clutter.ModifierType.CONTROL_MASK
             ? 'image' : 'text';
         if (this._doubleClick.register(event.get_time(),x,y,mode)) {
+            // Double-click actions must never accidentally begin a pan.
+            this._boardPan=null;
             if (mode==='image')
                 this._chooseImage({x,y});
             else
                 this._createNoteAtScreen(x,y);
             return Clutter.EVENT_STOP;
         }
+        // The first click becomes a PENDING drag, with no camera movement.
+        // This preserves plain double-click and Ctrl+double-click.
+        // Only a held left button moving at least 6px activates navigation.
+        this._boardPan={start:{x,y},last:{x,y},active:false,changed:false};
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    _moveBoardPan(event,x,y) {
+        const session=this._boardPan;
+        if (!session)
+            return Clutter.EVENT_PROPAGATE;
+        if (!(event.get_state() & Clutter.ModifierType.BUTTON1_MASK)) {
+            this._endBoardPan();
+            return Clutter.EVENT_PROPAGATE;
+        }
+        if (!session.active) {
+            if (!boardDragHasStarted(session.start,{x,y}))
+                return Clutter.EVENT_PROPAGATE;
+            session.active=true;
+            this._doubleClick.reset();
+        }
+        const dx=x-session.last.x;
+        const dy=y-session.last.y;
+        session.last={x,y};
+        const next=dragBoardView(this._view,dx,dy,
+            {width:global.stage.width,height:global.stage.height},
+            this._boardSize);
+        if (next.panX!==this._view.panX || next.panY!==this._view.panY) {
+            session.changed=true;
+            this._view=next;
+            this._applyView();
+            this._scheduleView();
+        }
+        return Clutter.EVENT_STOP;
+    }
+
+    _endBoardPan() {
+        const session=this._boardPan;
+        this._boardPan=null;
+        if (!session)
+            return false;
+        if (session.active && session.changed && this._service) {
+            // Commit the latest camera once at release. A timeout saved
+            // during dragging is harmless: D-Bus calls are serialized.
+            if (this._viewTimer) {
+                GLib.Source.remove(this._viewTimer);
+                this._viewTimer=0;
+            }
+            this._persistView();
+        }
+        return session.active;
     }
 
     _beginGrab() {
@@ -1139,6 +1192,14 @@ export class BoardView {
                 }
                 return this._motion(event);
             }
+            // Board panning is allowed only when the press began in a
+            // blank region; pin, image, editor and resize gestures never
+            // register _boardPan.
+            if (this._boardPan) {
+                const result=this._moveBoardPan(event,x,y);
+                if (result===Clutter.EVENT_STOP)
+                    return result;
+            }
             if (this._stringDraft) {
                 this._stringDraft.target = {
                     x: (x - this._view.panX) / this._view.zoom,
@@ -1154,6 +1215,11 @@ export class BoardView {
                 const result = this._release(event);
                 if (result === Clutter.EVENT_STOP)
                     return result;
+            }
+            if (this._boardPan && event.get_button()===1) {
+                const wasPanning=this._endBoardPan();
+                if (wasPanning)
+                    return Clutter.EVENT_STOP;
             }
             if (this._stringDraft && event.get_button() === 1) {
                 const [x, y] = event.get_coords();
@@ -1392,6 +1458,7 @@ export class BoardView {
     }
 
     destroy() {
+        this._endBoardPan();
         this._cancelTextHold();
         this._cancelString();
         this._closePinMenu();

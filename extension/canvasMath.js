@@ -66,3 +66,19 @@ export function clampBoardCamera(view,viewport,board) {
 export function zoomBoardAt(view,cursor,requestedZoom,viewport,board) {
     return clampBoardCamera(zoomAt(view,cursor,requestedZoom),viewport,board);
 }
+
+// Empty-board left-drag moves the VIEWPORT; note world-space geometry is unchanged.
+export const BOARD_DRAG_THRESHOLD_PX = 6;
+
+export function boardDragHasStarted(start,current) {
+    if (!start || !current ||
+        ![start.x,start.y,current.x,current.y].every(Number.isFinite))
+        return false;
+    return Math.hypot(current.x-start.x,current.y-start.y) >= BOARD_DRAG_THRESHOLD_PX;
+}
+
+export function dragBoardView(view,dx,dy,viewport,board) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy))
+        return view;
+    return clampBoardCamera(panBy(view,dx,dy),viewport,board);
+}
