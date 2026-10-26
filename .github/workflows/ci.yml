@@ -109,7 +109,8 @@ jobs:
         with:
           name: evidence-note-board-fedora44-release-candidate
           path: |
-            dist/*.rpm
+            dist/evidence-note-board-[0-9]*.x86_64.rpm
+            dist/evidence-note-board-[0-9]*.src.rpm
             dist/*-gnome50.zip
             dist/SHA256SUMS
           if-no-files-found: error

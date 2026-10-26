@@ -71,8 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$VERSION_TAG" \
-            dist/*.x86_64.rpm \
-            dist/*.src.rpm \
+            dist/evidence-note-board-[0-9]*.x86_64.rpm \
+            dist/evidence-note-board-[0-9]*.src.rpm \
             dist/*-gnome50.zip \
             dist/SHA256SUMS \
             --verify-tag \

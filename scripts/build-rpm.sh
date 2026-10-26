@@ -57,8 +57,12 @@ rpmbuild -ba \
     packaging/evidence-note-board.spec
 
 mkdir -p "$ROOT/dist"
+# Only publish the application RPM and SRPM, not automatically generated
+# debuginfo/debugsource subpackages which are absent from SHA256SUMS.
 find "$work/rpmbuild/RPMS" "$work/rpmbuild/SRPMS" -type f \
-    \( -name '*.rpm' \) -exec cp -v {} "$ROOT/dist/" \;
+    \( -name "$name-$version-*.x86_64.rpm" -o \
+       -name "$name-$version-*.src.rpm" \) \
+    -exec cp -v {} "$ROOT/dist/" \;
 bash scripts/build-extension.sh
 
 # Prevent stale local RPMs or ZIPs from leaking into checksums/release.
