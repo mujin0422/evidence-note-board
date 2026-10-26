@@ -25,7 +25,9 @@ assert "boundedImageDecodeSize(photoWidth,photoHeight,paintScale)" in image_sect
 assert "load_file_async(file, -1, -1" not in image_section
 assert "_persistGeometry(item.note)" in VIEW
 assert "this._applyPosition(this._dragNote)" in VIEW
-assert "this._bodyNotes.get(event.get_source())" in VIEW
+assert "this._bodyNotes.get(source)" in VIEW
+assert "const source=event.get_source();" in VIEW
+assert "this._focusEmptyTextAt(x,y)" in VIEW
 
 # High-frequency pan events must not relayout identical HUD text or repaint a
 # hidden Cairo wire layer.
