@@ -49,7 +49,12 @@ contains(script,"git archive --format=tar HEAD","tar -C \"$ROOT\" --exclude=",
 contains(ci,"container:","fedora:44","scripts/build-rpm.sh","actions/upload-artifact@")
 contains(release,"tags:","scripts/check-release-version.py",
     "scripts/build-rpm.sh","gh release create",
-    "contents: write","--verify-tag","SHA256SUMS")
+    "contents: write","--verify-tag","SHA256SUMS",
+    "workflow_dispatch:","inputs.tag","safe.directory",
+    'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
+    "refs/tags/$VERSION_TAG^{commit}",
+    "github.event_name == 'workflow_dispatch' && inputs.tag || github.ref",
+    "github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name")
 assert 'password=' not in release.lower()
 assert (ROOT/".github/workflows/release.yml").exists()
 module=importlib.util.spec_from_file_location("release_version",ROOT/"scripts/check-release-version.py")

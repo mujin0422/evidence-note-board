@@ -72,3 +72,17 @@ Also preserve `~/.config/evidence-note-board/settings.json`.
 - CI containers verify compiled RPM + payload, not GNOME desktop behavior.
 - Installation/upgrade/uninstall tests in a real user session remain a
   manual release acceptance gate. See [PHASE_06](../docs/phases/PHASE_06.md).
+
+## Recovering an existing tag after a workflow-only failure
+
+Do not rewrite or force-push release tags to rerun a failed GitHub Actions
+workflow. The updated `release.yml` supports manual `workflow_dispatch`:
+select the **dev** branch (the default workflow branch) and enter the
+already-pushed tag, e.g. `v0.2.0`. The workflow checks out the **tagged
+commit**, not `dev`, validates the tag/metadata, builds the locked RPM,
+and publishes the release when all checks pass. See
+[Phase 6 recovery](../docs/phases/PHASE_06.md).
+
+The Fedora container Git `safe.directory` exception is scoped only to
+`$GITHUB_WORKSPACE` and is configured before invoking git in the
+release job, avoiding Git's 'dubious ownership' error.

@@ -78,3 +78,31 @@ with a usable Git repository use a committed git archive.
 - These cosmetic changes do not alter backend, settings, SQLite or
   existing pinned notes. Local RPM testers should rebuild and use
   `dnf reinstall` when using the same pre-release RPM NEVRA.
+
+## v0.2.0 release workflow recovery (26/10/2026)
+
+- Fedora 44 owner validated RPM `0.2.0-1.fc44.x86_64` installed,
+  backend `active/enabled`, GNOME extension v18 `ACTIVE`, and all
+  RPM/SRPM/ZIP SHA-256 checksums `OK`.
+- The owner pushed annotated tag `v0.2.0` to commit
+  `9902183b92c1c94972481b9229d563dceca61eb8` (matching `dev`
+  at the time). **Do not force-move or delete this tag.**
+- Initial GitHub Release run failed during `git rev-parse HEAD` because
+  the Fedora 44 GitHub Actions job container classified the checked-out
+  workspace as `dubious ownership`. The build itself did not run.
+- Patch the workflow on `dev`: trust only the current
+  `$GITHUB_WORKSPACE` via `git config --global --add safe.directory`
+  and add a `workflow_dispatch` path accepting an existing tag.
+- **After patch merges to default branch `dev`**, use
+  GitHub → Actions → **Fedora 44 Release** → **Run workflow** →
+  Branch **dev**, tag input `v0.2.0`.
+  The dispatch uses the fixed workflow from `dev` but checks out the
+  original immutable `v0.2.0` source commit, validates the tag points
+  to the source HEAD, and rebuilds identical-version artifacts.
+- Inspect job exit status and
+  `https://github.com/mujin0422/evidence-note-board/releases/tag/v0.2.0`;
+  verify that RPM, Source RPM, GNOME50 ZIP and SHA256SUMS all exist.
+  **Do not describe the release as published until that check succeeds.**
+
+This recovery publishes the original tested tag without changing its
+target commit, RPM version or the application's SQLite schema.
