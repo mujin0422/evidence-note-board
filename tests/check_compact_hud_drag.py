@@ -27,7 +27,7 @@ assert "this._startNoteDrag(event, note)" in js
 assert "this._beginGrab()" not in js[
     js.index("    _startNoteDrag("):js.index("    _startPaperGesture(")]
 assert "isEmptyBoardPoint(" in js
-assert "this._world.set_position(0,0)" in js
+assert "this._world.set_position(this._view.panX,this._view.panY)" in js
 assert "new Pango.AttrList()" in js
 assert "Clutter.KEY_b" in js
 assert "this._cancelTextHold();\n        this._cancelString();" in js
