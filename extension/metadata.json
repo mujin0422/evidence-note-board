@@ -1,8 +1,8 @@
 {
   "uuid": "evidence-note-board@mujin0422.github.io",
-  "name": "Evidence Note Board (Phase 4)",
-  "description": "Experimental charcoal board at the GNOME desktop background layer",
+  "name": "Evidence Note Board",
+  "description": "Local-first desktop evidence board with pinned text, photos and red strings",
   "shell-version": ["50"],
   "url": "https://github.com/mujin0422/evidence-note-board",
-  "version": 17
+  "version": 18
 }
