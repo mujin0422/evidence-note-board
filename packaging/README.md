@@ -26,9 +26,9 @@ rpmbuild, linking **system SQLite**. Crate downloads are required only
 during the source-vendoring step, never at RPM build time.
 
 Artifacts are deposited in `dist/`:
-- `evidence-note-board-0.2.0-1.fc44.x86_64.rpm` (filename may vary with dist)
-- `evidence-note-board-0.2.0-1.fc44.src.rpm`
-- `evidence-note-board-0.2.0-gnome50.zip`
+- `evidence-note-board-0.2.1-1.fc44.x86_64.rpm` (filename may vary with dist)
+- `evidence-note-board-0.2.1-1.fc44.src.rpm`
+- `evidence-note-board-0.2.1-gnome50.zip`
 - `SHA256SUMS`
 
 The RPM installs the Rust backend in `/usr/bin`, GNOME extension under
