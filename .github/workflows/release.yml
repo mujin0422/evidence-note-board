@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - 'v*'
+  # Re-run the release pipeline for an existing tag without re-tagging,
+  # mutating published source or force-pushing history.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing annotated release tag (e.g. v0.2.0)'
+        required: true
+        type: string
 
 # The tag must be an intentional, stable version. No scheduled publishing.
 permissions:
@@ -27,9 +35,15 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          # On manual dispatch, use the existing tagged source commit,
+          # not the current dev HEAD. The fixed workflow comes from dev.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - name: Trust only this checked-out workspace for container Git
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Validate exact signed-off release version
         env:
-          VERSION_TAG: ${{ github.ref_name }}
+          VERSION_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           version="$(python3 - <<'PY'
@@ -39,7 +53,12 @@ jobs:
           PY
           )"
           python3 scripts/check-release-version.py "$version" "$VERSION_TAG"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          # For push, GITHUB_SHA is the tagged commit; for manual runs
+          # it is dev HEAD, so verify against the immutable tag itself.
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$VERSION_TAG^{commit}")"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          fi
       - name: Build and test offline Fedora RPM
         run: |
           bash scripts/build-rpm.sh
@@ -47,7 +66,7 @@ jobs:
           (cd dist && sha256sum -c SHA256SUMS)
       - name: Generate release notes
         env:
-          VERSION_TAG: ${{ github.ref_name }}
+          VERSION_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           {
             echo "# Evidence Note Board $VERSION_TAG"
@@ -67,7 +86,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          VERSION_TAG: ${{ github.ref_name }}
+          VERSION_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           gh release create "$VERSION_TAG" \
