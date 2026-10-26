@@ -7,6 +7,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {screenToWorld} from './canvasMath.js';
+import {TEXT_HOLD_MS, keepTextHold} from './holdDrag.js';
 import {confineNote, maxZoomThatFits, validBoardPoint} from './boardBounds.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
@@ -1031,7 +1032,7 @@ export class BoardView {
         const [x,y]=event.get_coords();
         const candidate={note,x,y,timer:0};
         this._textHold=candidate;
-        candidate.timer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,330,()=>{
+        candidate.timer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,TEXT_HOLD_MS,()=>{
             candidate.timer=0;
             if (this._textHold===candidate) {
                 this._textHold=null;
@@ -1113,11 +1114,9 @@ export class BoardView {
             const [x, y] = event.get_coords();
             if (this._textHold) {
                 const candidate=this._textHold;
-                const distance=Math.hypot(x-candidate.x,y-candidate.y);
-                // Short click+drag still selects text normally. Only a
-                // stationary 330ms press claims the gesture for moving.
-                if (distance>7 ||
-                    !(event.get_state() & Clutter.ModifierType.BUTTON1_MASK))
+                // Quick movement keeps native text selection behavior.
+                if (!keepTextHold(candidate,{x,y},
+                    Boolean(event.get_state() & Clutter.ModifierType.BUTTON1_MASK)))
                     this._cancelTextHold();
             }
             if (this._dragPoint) {

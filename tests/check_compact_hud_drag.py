@@ -17,6 +17,8 @@ assert "const popupHeight=menu.height||naturalHeight||120" in js
 assert "menu.set_position(" in js
 assert "this._startTextHold(event,note)" in js
 assert "_beginNoteDrag(note,x,y)" in js
+assert "keepTextHold(candidate,{x,y}," in js
+assert "GLib.PRIORITY_DEFAULT,TEXT_HOLD_MS" in js
 assert "Clutter.EventType.BUTTON_RELEASE" in js
 assert "this._cancelTextHold()" in js
 assert "Clutter.ModifierType.BUTTON1_MASK" in js
