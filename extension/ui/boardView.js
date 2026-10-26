@@ -978,6 +978,10 @@ export class BoardView {
             this._queueStrings();
             const item = this._notes.get(id);
             if (item) {
+                if (item.body && this._focusedBody===item.body) {
+                    global.stage.set_key_focus(null);
+                    this._stopCaretBlink();
+                }
                 item.pin?.destroy();
                 item.actor.destroy();
                 this._notes.delete(id);
@@ -1311,6 +1315,13 @@ export class BoardView {
     }
 
     _isEditorPress(stageX,stageY,source) {
+        // Settings is an overlay above world notes: clicking it should
+        // always blur the editor even if a note is behind the popup.
+        if (source && (
+            source===this._settingsButton ||
+            this._settingsButton?.contains(source) ||
+            (this._settingsMenu && this._settingsMenu.contains(source))))
+            return false;
         if (source && this._bodyNotes.has(source))
             return true;
         // Wayland sometimes picks the PAPER rather than a zero-glyph

@@ -42,3 +42,18 @@ for token in (
 ):
     assert token in code,token
 assert "isEmptyTextEditorHit" in (root/"extension/input/noteHitTest.js").read_text()
+
+# Caret is focus-scoped: blur on blank board, Settings, other app, note
+# deletion or disable; any note can regain keyboard focus on click.
+for token in (
+    "CARET_BLINK_MS = 530",
+    "notify::key-focus",
+    "global.stage.get_key_focus()",
+    "body.set_cursor_visible(!body.get_cursor_visible())",
+    "global.stage.set_key_focus(null)",
+    "_blurEditorOnOutsidePress(event)",
+    "isTextEditorHit(note,x,y,this._view.zoom)",
+    "this._stopCaretBlink();",
+    "this._settingsButton?.contains(source)",
+):
+    assert token in code,token
