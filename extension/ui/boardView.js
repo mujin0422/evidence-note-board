@@ -17,7 +17,7 @@ import {TEXT_HOLD_MS, keepTextHold} from '../input/holdDrag.js';
 import {confineNote, validBoardPoint} from '../geometry/boardBounds.js';
 import {NoteService} from '../services/noteService.js';
 import {DoubleClickTracker} from '../input/doubleClickTracker.js';
-import {isEmptyBoardPoint,isEmptyTextEditorHit} from '../input/noteHitTest.js';
+import {isEmptyBoardPoint,isEmptyTextEditorHit,isTextEditorHit} from '../input/noteHitTest.js';
 import {hasLegacyTitle} from '../model/noteContent.js';
 import {richTextForNote,encodeRichText,toggleBoldSpans,rebaseBoldSpans,
     byteOffsetForCharacter,characterLength} from '../model/richText.js';
@@ -30,6 +30,7 @@ import {DEFAULT_PREFERENCES,singleScreenLayout,curveVisible,reconnectDelay}
     from '../core/runtimePolicy.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
+const CARET_BLINK_MS = 530;
 
 export class BoardView {
     // Initialize state only; GNOME actors are created later by mount().
@@ -66,6 +67,8 @@ export class BoardView {
         this._boardSize = {width:8000,height:6000};
         this._notes = new Map();
         this._bodyNotes = new WeakMap();
+        this._focusedBody = null;
+        this._caretBlinkTimer = 0;
         this._timers = new Map();
         this._viewTimer = 0;
         this._service = null;
@@ -157,6 +160,10 @@ export class BoardView {
         // it. Fixes the cursor-stuck-to-pin regression at source.
         this._stageSignals.push(global.stage.connect('captured-event',
             (_actor, event) => this._capturedPointer(event)));
+        // The Stage owns the actual keyboard focus. A background click or
+        // another app taking focus must hide the old note's caret.
+        this._stageSignals.push(global.stage.connect('notify::key-focus',
+            () => this._syncCaretFocus()));
 
         // AUTO_START uses the per-user D-Bus activation entry if the
         // backend has not started yet. Name-owner changes make reconnection
@@ -1231,6 +1238,7 @@ export class BoardView {
                 if (body && (event.get_source()===paper ||
                     body.get_text()==='')) {
                     global.stage.set_key_focus(body);
+                    this._syncCaretFocus();
                     // Do not disturb selection/caret when a nonempty
                     // Clutter.Text itself received the click.
                     if (event.get_source()!==body)
@@ -1257,10 +1265,80 @@ export class BoardView {
                 this._view.zoom))
                 continue;
             global.stage.set_key_focus(body);
+            this._syncCaretFocus();
             body.set_cursor_position(-1);
             return note;
         }
         return null;
+    }
+
+    // Exactly one caret may blink, and only while its Clutter.Text owns
+    // the GNOME Stage key focus. Remove the timer on blur or extension
+    // teardown so a stale callback never touches destroyed Shell actors.
+    _stopCaretBlink() {
+        if (this._caretBlinkTimer) {
+            GLib.Source.remove(this._caretBlinkTimer);
+            this._caretBlinkTimer = 0;
+        }
+        if (this._focusedBody)
+            this._focusedBody.set_cursor_visible(false);
+        this._focusedBody = null;
+    }
+
+    _syncCaretFocus() {
+        if (!this._alive)
+            return;
+        const focus=global.stage.get_key_focus();
+        const body=focus && this._bodyNotes.has(focus) ? focus : null;
+        if (body===this._focusedBody)
+            return;
+        this._stopCaretBlink();
+        if (!body)
+            return;
+        this._focusedBody=body;
+        body.set_cursor_visible(true);
+        this._caretBlinkTimer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+            CARET_BLINK_MS,()=>{
+                if (!this._alive || global.stage.get_key_focus()!==body ||
+                    !this._bodyNotes.has(body)) {
+                    this._caretBlinkTimer=0;
+                    this._stopCaretBlink();
+                    return GLib.SOURCE_REMOVE;
+                }
+                body.set_cursor_visible(!body.get_cursor_visible());
+                return GLib.SOURCE_CONTINUE;
+            });
+    }
+
+    _isEditorPress(stageX,stageY,source) {
+        if (source && this._bodyNotes.has(source))
+            return true;
+        // Wayland sometimes picks the PAPER rather than a zero-glyph
+        // Clutter.Text. Use the same rotated/zoomed local-space hit box
+        // as PR #30, now for nonempty text as well; ignore pin/borders.
+        for (const item of [...this._notes.values()].reverse()) {
+            const {note,actor,body}=item;
+            if (note.type!=='text' || !body)
+                continue;
+            const [ok,x,y]=actor.transform_stage_point(stageX,stageY);
+            if (ok && isTextEditorHit(note,x,y,this._view.zoom))
+                return true;
+        }
+        return false;
+    }
+
+    _blurEditorOnOutsidePress(event) {
+        const current=global.stage.get_key_focus();
+        if (!current || !this._bodyNotes.has(current))
+            return;
+        const [x,y]=event.get_coords();
+        if (this._isEditorPress(x,y,event.get_source()))
+            return;
+        // Clearing key focus is separate from pointer propagation. Board
+        // navigation, photo import, Settings and note drag still receive
+        // the original click, but the old note loses its visible caret.
+        global.stage.set_key_focus(null);
+        this._syncCaretFocus();
     }
 
     // Observe stage events that child actors may consume before bubbling.
@@ -1268,6 +1346,8 @@ export class BoardView {
         if (!this._alive)
             return Clutter.EVENT_PROPAGATE;
         const type = event.type();
+        if (type===Clutter.EventType.BUTTON_PRESS && event.get_button()===1)
+            this._blurEditorOnOutsidePress(event);
         // Capture text presses before Clutter.Text/its click gesture can
         // consume them on GNOME 50. Keep the body handler as a fallback.
         if (type === Clutter.EventType.BUTTON_PRESS &&
@@ -1462,7 +1542,7 @@ export class BoardView {
             reactive: true,
             editable: true,
             selectable: true,
-            cursor_visible: true,
+            cursor_visible: false, // Only visible while this note has focus.
             // An empty Clutter.Text still needs the full clickable area
             // allocated by the paper's St.BoxLayout.
             x_expand: true,
@@ -1482,6 +1562,7 @@ export class BoardView {
         );
         body.connect('button-press-event', (_actor,event) => {
             global.stage.set_key_focus(body);
+            this._syncCaretFocus();
             // A quick drag highlights words (Ctrl+B stays intact).
             // Hold the text for ~330ms before moving to drag the paper.
             this._startTextHold(event,note);
@@ -1528,6 +1609,7 @@ export class BoardView {
 
         if (focus) {
             global.stage.set_key_focus(body);
+            this._syncCaretFocus();
             body.set_cursor_position(-1);
         }
 
@@ -1588,6 +1670,9 @@ export class BoardView {
 
     // Release every actor, source, signal, watcher and transient gesture.
     destroy() {
+        // Remove the caret source BEFORE removing text actors or Stage
+        // signals; no source callback can outlive the extension.
+        this._stopCaretBlink();
         this._endBoardPan();
         this._cancelTextHold();
         this._cancelString();

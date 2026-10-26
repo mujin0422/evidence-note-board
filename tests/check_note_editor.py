@@ -12,7 +12,13 @@ assert "this._service.createNote('', ''," in code
 assert "this._service.updateNote(id, '', content)" in code
 assert "richTextForNote(note)" in code and "hasLegacyTitle(note)" in code
 assert "this._notes.set(note.id, item)" in code
-assert "cursor_visible: true" in code
+assert "cursor_visible: false" in code
+assert "notify::key-focus" in code
+assert "CARET_BLINK_MS = 530" in code
+assert "body.set_cursor_visible(!body.get_cursor_visible())" in code
+assert "global.stage.set_key_focus(null)" in code
+assert "_blurEditorOnOutsidePress(event)" in code
+assert "_stopCaretBlink();" in code
 assert "single_line_mode: false" in code
 assert "activatable: false" in code
 assert "editable: true" in code and "reactive: true" in code
