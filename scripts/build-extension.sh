@@ -11,9 +11,12 @@ python3 - "$ROOT" "$OUT" <<'PY'
 import pathlib
 import sys
 import zipfile
+import tomllib
 
 root = pathlib.Path(sys.argv[1])
-output = pathlib.Path(sys.argv[2]) / "evidence-note-board-gnome50-phase2.zip"
+with (root / "backend" / "Cargo.toml").open("rb") as manifest:
+    version = tomllib.load(manifest)["package"]["version"]
+output = pathlib.Path(sys.argv[2]) / f"evidence-note-board-{version}-gnome50.zip"
 source = root / "extension"
 files = (
     "metadata.json", "extension.js", "stylesheet.css",

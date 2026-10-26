@@ -7,9 +7,10 @@ Summary:        Local-first evidence board for GNOME Shell
 
 License:        MIT
 URL:            https://github.com/mujin0422/evidence-note-board
-Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
+# The Phase 6 build script creates this reproducible source bundle with
+# locked, checksum-verified vendored crates. No network access during rpmbuild.
+Source0:        %{name}-%{version}.tar.gz
 
-BuildRequires:  cargo-rpm-macros
 BuildRequires:  rust >= 1.85
 BuildRequires:  cargo
 BuildRequires:  gcc
@@ -17,36 +18,31 @@ BuildRequires:  pkgconfig(sqlite3)
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  nodejs
 BuildRequires:  python3
+BuildRequires:  tar
+BuildRequires:  gzip
 
 Requires:       gnome-shell >= 50
 Requires:       gnome-shell < 51
+Requires:       zenity
+Requires:       python3
 %{?systemd_requires}
 
 %description
-Evidence Note Board is a native GNOME Shell evidence board with local text and
-image notes, pins, red-string connections, and SQLite persistence. A Rust user
-service keeps database and filesystem work outside the compositor and exposes
-an asynchronous session D-Bus API to the extension.
-
-%generate_buildrequires
-pushd backend
-%cargo_generate_buildrequires -n
-popd
+Evidence Note Board is a native GNOME Shell evidence board with local text
+and image notes, pins, red strings and SQLite storage. Its Rust user service
+keeps filesystem and persistence work outside the GNOME Shell compositor.
 
 %prep
 %autosetup -n %{name}-%{version}
 
 %build
-pushd backend
-# Disable the developer-only bundled-sqlite default feature. Fedora builds
-# against pkgconfig(sqlite3), so security fixes come from the system package.
-%cargo_build -n
-popd
+# Vendor sources and Cargo.lock are supplied by the SRPM. Use system SQLite
+# instead of bundled SQLite; never download crates while building the RPM.
+cargo build --manifest-path backend/Cargo.toml --release --locked --offline --no-default-features
 
 %install
-pushd backend
-%cargo_install -n
-popd
+install -D -m 0755 backend/target/release/evidence-note-boardd \
+    %{buildroot}%{_bindir}/evidence-note-boardd
 
 extension_dir=%{buildroot}%{_datadir}/gnome-shell/extensions/%{uuid}
 install -d "$extension_dir"
@@ -64,9 +60,7 @@ install -D -m 0755 scripts/backup-board.py \
     %{buildroot}%{_bindir}/evidence-note-board-backup
 
 %check
-pushd backend
-%cargo_test -n
-popd
+cargo test --manifest-path backend/Cargo.toml --locked --offline --no-default-features --all-targets
 node --test tests/*.test.js
 bash scripts/build-extension.sh
 for check in tests/check_*.py; do
@@ -95,4 +89,4 @@ bash -n scripts/*.sh
 
 %changelog
 * Mon Oct 26 2026 mujin0422 - 0.2.0-1
-- Initial Fedora RPM packaging
+- Fedora 44 GNOME Shell 50 package, offline build and runtime dependencies
