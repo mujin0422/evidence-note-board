@@ -106,3 +106,13 @@ If `gnome-extensions enable` reports not found, log out and in, then
 repeat. Verify no local development copy shadows the system extension.
 If the file dialog does not appear, check `rpm -q zenity`.
 Do not troubleshoot by deleting the database.
+
+## Release status and tag recovery
+
+A successful build and local RPM installation do not guarantee the GitHub
+Release is visible. Check `Actions → Fedora 44 Release` and the public
+Releases tab. If the tagged release workflow fails in its Git safety
+check, **do not force-push the tag**. After the workflow-only fix merges
+to default branch `dev`, open **Actions → Fedora 44 Release → Run workflow**,
+select **dev** and enter existing tag `v0.2.0`. The build still uses
+the original v0.2.0 source tree.
