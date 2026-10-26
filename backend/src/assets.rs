@@ -1,3 +1,8 @@
+//! Image-import boundary for the backend.
+//!
+//! Files are size-limited, decoded and hashed before they can be copied into
+//! the board's private asset directory. File extensions are never trusted.
+
 use image::{ImageFormat, ImageReader};
 use sha2::{Digest, Sha256};
 use std::{error::Error, fs, io::Cursor, path::Path};
@@ -5,6 +10,7 @@ use std::{error::Error, fs, io::Cursor, path::Path};
 pub const MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAX_PIXELS: u64 = 20_000_000;
 
+/// An image that passed content, format, size and decode validation.
 pub struct ValidatedImage {
     pub bytes: Vec<u8>,
     pub ext: &'static str,
@@ -14,7 +20,10 @@ pub struct ValidatedImage {
     pub checksum: String,
 }
 
-// Decode metadata BEFORE importing; never infer image format from suffix.
+/// Load and validate an image selected by the user.
+///
+/// Decode metadata before importing and infer format from magic bytes rather
+/// than the filename suffix. The returned bytes are safe to persist locally.
 pub fn validate_file(path: &Path) -> Result<ValidatedImage, Box<dyn Error + Send + Sync>> {
     if !path.is_absolute() {
         return Err("Image path must be absolute".into());

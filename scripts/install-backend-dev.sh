@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Build and install the Rust backend for the current user. The script updates
+# systemd/D-Bus activation, restarts the service and verifies one IPC call.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,7 +25,9 @@ install -d -m 0700 "$DBUS_DIR"
 # compilation succeeded; restart below and keep the existing SQLite data.
 systemctl --user stop "$UNIT" 2>/dev/null || true
 
-install -m 0755 "$ROOT/backend/target/release/evidence-note-boardd" "$HOME/.local/bin/evidence-note-boardd"
+# Strip only the installed copy to save disk/cache pages. Keep Cargo's release
+# artifact with symbols so a developer can still inspect crashes locally.
+install -s -m 0755 "$ROOT/backend/target/release/evidence-note-boardd" "$HOME/.local/bin/evidence-note-boardd"
 install -m 0644 "$ROOT/packaging/evidence-note-board.service" "$HOME/.config/systemd/user/$UNIT"
 
 python3 "$ROOT/scripts/render-dbus-service.py" \

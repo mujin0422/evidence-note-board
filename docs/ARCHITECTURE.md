@@ -94,6 +94,8 @@ note -> GNOME St.Icon Gio.FileIcon`.
 SQLite schema Phase 1 đã có `assets` (file_path, mime, width, height,
 checksum). Phase 3 tái dùng schema v1, không nâng user_version. File ảnh
 được lưu theo UUID do backend tạo để tránh ghi đè và path traversal.
+Các lần nhập có cùng SHA-256 dùng hard link với tên UUID riêng, nhờ đó xóa
+từng note vẫn độc lập nhưng không chiếm lặp block đĩa.
 Phía compositor không giải mã ảnh nguồn trước khi nhập; GJS chỉ hiển thị
 bản sao đã được Rust xác minh. Nút file picker dùng Zenity process không
 block GNOME Shell. Đây chưa phải kiến trúc release cuối cùng; portal
@@ -113,7 +115,11 @@ GJS preserves note actors/dirty content, retries D-Bus with capped
 exponential backoff and persists changes after reconnect.
 
 Wire render is stage-sized St.DrawingArea, throttled redraw and screen
-culling. No GPU frames benchmark is inferred from this approach.
+culling. Khi tắt dây đỏ, camera/note motion không đánh thức Cairo; HUD bỏ qua
+những chuỗi trạng thái không thay đổi. Ảnh được decode gần kích thước note thay
+vì giữ bitmap nguồn nhiều megapixel trong tiến trình `gnome-shell`. Backend
+dùng Tokio current-thread vì chỉ sở hữu một session-bus connection và các thao
+tác SQLite ngắn. No GPU frames benchmark is inferred from this approach.
 SQLite backup and SHA-verified asset restore are an explicit CLI workflow,
 not an automatic destructive recovery on app startup. See
 [PHASE_05](phases/PHASE_05.md).

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt,
-    normalizeAngle, angleDelta, pointerAngle} from '../extension/geometry.js';
+    normalizeAngle, angleDelta, pointerAngle} from '../extension/geometry/noteGeometry.js';
 
 test('text width resize is zoom-independent and clamped', () => {
     assert.equal(resizedTextWidth(270, 100, 0.5), 470);

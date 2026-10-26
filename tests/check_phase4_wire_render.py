@@ -1,7 +1,7 @@
 """Source regression only, not a compositor screenshot test."""
 from pathlib import Path
 root = Path(__file__).resolve().parents[1]
-js = (root / "extension/boardView.js").read_text(encoding="utf-8")
+js = (root / "extension/ui/boardView.js").read_text(encoding="utf-8")
 css = (root / "extension/stylesheet.css").read_text(encoding="utf-8")
 schema = (root / "db/migrations/0001_init.sql").read_text(encoding="utf-8")
 db = (root / "backend/src/db.rs").read_text(encoding="utf-8")

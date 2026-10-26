@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isEmptyBoardPoint, insideRect} from '../extension/noteHitTest.js';
+import {isEmptyBoardPoint, insideRect} from '../extension/input/noteHitTest.js';
 
 const note = {x: 300, y: 400, width: 270, height: 185};
 

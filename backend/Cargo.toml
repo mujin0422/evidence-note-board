@@ -1,3 +1,5 @@
+# Rust user-service crate; the resulting evidence-note-boardd binary is
+# installed into ~/.local/bin by scripts/install-backend-dev.sh.
 [package]
 name = "evidence-note-boardd"
 version = "0.2.0"
@@ -5,12 +7,21 @@ edition = "2021"
 license = "MIT"
 description = "Local-first SQLite and D-Bus backend for Evidence Note Board"
 
+[features]
+# Developer builds remain self-contained. Fedora RPM builds pass `-n` to the
+# cargo macros, disable this feature and link against pkgconfig(sqlite3).
+default = ["bundled-sqlite"]
+bundled-sqlite = ["rusqlite/bundled"]
+
 [dependencies]
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = "0.37"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+# One session-bus connection and short SQLite calls do not need a worker pool.
+# The current-thread runtime keeps the always-on daemon small while zbus stays
+# fully asynchronous.
+tokio = { version = "1", features = ["macros", "rt"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 sha2 = "0.10"

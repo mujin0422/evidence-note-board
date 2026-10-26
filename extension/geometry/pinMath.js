@@ -2,6 +2,7 @@
 // Its position follows card geometry/rotation, with a fixed-size pin head.
 export const PIN_SIZE = 40;
 
+// Place the pin head at the rotated top-center anchor of a card.
 export function pinPosition(note, size = PIN_SIZE) {
     const radians = (note.rotation || 0) * Math.PI / 180;
     const centerX = note.x + note.width / 2;

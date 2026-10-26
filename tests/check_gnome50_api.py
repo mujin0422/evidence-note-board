@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-source = (ROOT / "extension/boardView.js").read_text(encoding="utf-8")
+source = (ROOT / "extension/ui/boardView.js").read_text(encoding="utf-8")
 metadata = (ROOT / "extension/metadata.json").read_text(encoding="utf-8")
 
 assert "import Cogl from 'gi://Cogl';" in source

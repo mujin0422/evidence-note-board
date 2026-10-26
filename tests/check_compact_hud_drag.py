@@ -3,7 +3,7 @@ Only Fedora GNOME/Wayland can validate actual compositor pointer behavior.
 """
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-js=(root/"extension/boardView.js").read_text(encoding="utf-8")
+js=(root/"extension/ui/boardView.js").read_text(encoding="utf-8")
 css=(root/"extension/stylesheet.css").read_text(encoding="utf-8")
 assert "this._hud.get_preferred_height(-1)" in js
 assert "this._settingsButton.set_size(height,height)" in js

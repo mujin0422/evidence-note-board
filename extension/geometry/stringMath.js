@@ -1,11 +1,13 @@
 // Pure world-to-stage math for precise menu placement and string endpoints.
 import {PIN_SIZE, pinPosition} from './pinMath.js';
 
+// Return a note pin's center in world coordinates.
 export function pinCenter(note) {
     const at = pinPosition(note);
     return {x: at.x + PIN_SIZE / 2, y: at.y + PIN_SIZE / 2};
 }
 
+// Project one world point into stage coordinates.
 export function worldToScreen(view, point) {
     return {x: view.panX + point.x * view.zoom,
         y: view.panY + point.y * view.zoom};
@@ -30,6 +32,7 @@ export function menuNearPin(note, view, viewport, width = 198, height = 136) {
     return {x, y};
 }
 
+// Build two sagging cubic-Bezier control points between endpoints.
 export function stringControlPoints(a, b) {
     const dx = b.x - a.x, dy = b.y - a.y;
     const sag = Math.min(72, Math.hypot(dx, dy) * .12);
@@ -37,10 +40,7 @@ export function stringControlPoints(a, b) {
         c2: {x: a.x + dx * .68, y: a.y + dy * .68 + sag}};
 }
 
-export function stringGeometry(first, second) {
-    return stringControlPoints(pinCenter(first), pinCenter(second));
-}
-
+// Find the closest eligible pin inside a fixed screen-space hit radius.
 export function nearestTargetPin(notes, view, screen, excludedId,
     maxScreenDistance = 26) {
     let target = null, closest = maxScreenDistance ** 2;

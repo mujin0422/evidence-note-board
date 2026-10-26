@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copy GNOME extension sources into the current user's extension directory.
+# GNOME Shell may still require logout/login before it loads changed modules.
 set -euo pipefail
 
 UUID="evidence-note-board@mujin0422.github.io"
@@ -21,12 +23,22 @@ if [[ "${XDG_SESSION_TYPE:-}" != "wayland" ]]; then
     exit 1
 fi
 
-mkdir -p "$TARGET"
-for name in metadata.json extension.js boardView.js canvasMath.js noteService.js doubleClickTracker.js noteHitTest.js noteContent.js geometry.js pinMath.js stringMath.js productionMath.js boardBounds.js richText.js holdDrag.js stylesheet.css; do
-    install -m 0644 "$ROOT/extension/$name" "$TARGET/$name"
+files=(
+    metadata.json extension.js stylesheet.css
+    ui/boardView.js
+    services/noteService.js
+    input/doubleClickTracker.js input/holdDrag.js input/noteHitTest.js
+    model/noteContent.js model/richText.js
+    geometry/canvasMath.js geometry/boardBounds.js geometry/imageSizing.js geometry/noteGeometry.js
+    geometry/pinMath.js geometry/stringMath.js
+    core/runtimePolicy.js
+)
+for name in "${files[@]}"; do
+    install -D -m 0644 "$ROOT/extension/$name" "$TARGET/$name"
 done
 
-# Remove helper left over from builds before drag-and-drop was retired.
+# Remove flat-layout modules and an old drag/drop helper retired by newer builds.
+rm -f "$TARGET"/{boardView,canvasMath,noteService,doubleClickTracker,noteHitTest,noteContent,geometry,pinMath,stringMath,productionMath,boardBounds,richText,holdDrag}.js
 rm -f "$TARGET/image-drop-target.py"
 
 echo "Đã chép GNOME extension tại $TARGET"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Convenience entry point for installing both backend and extension from source.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

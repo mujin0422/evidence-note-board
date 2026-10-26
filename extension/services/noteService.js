@@ -1,3 +1,5 @@
+// Typed asynchronous D-Bus boundary between GNOME Shell and the Rust backend.
+// JSON is used only for structured return values; mutations retain native args.
 import Gio from 'gi://Gio';
 
 const XML = `<node>
@@ -51,11 +53,13 @@ const PATH = '/io/github/mujin0422/EvidenceNoteBoard';
 // All calls use the asynchronous GJS D-Bus proxy API. Mutations are
 // serialized to preserve order (older autosaves may not overtake newer ones).
 export class NoteService {
+    // Wrap a connected proxy and initialize the mutation serialization chain.
     constructor(proxy) {
         this._proxy = proxy;
         this._tail = Promise.resolve();
     }
 
+    // Connect to the well-known user-session service and verify name ownership.
     static async connect() {
         const proxy = await new Promise((resolve, reject) => {
             new Proxy(Gio.DBus.session, SERVICE, PATH, (instance, error) => {
@@ -70,32 +74,38 @@ export class NoteService {
         return new NoteService(proxy);
     }
 
+    // Queue writes so an older autosave cannot overtake a newer user action.
     _enqueue(action) {
         const call = this._tail.then(action);
         this._tail = call.catch(() => undefined);
         return call;
     }
 
+    // Fetch and decode all notes.
     async listNotes() {
         const [payload] = await this._proxy.ListNotesAsync();
         return JSON.parse(payload);
     }
 
+    // Fetch and decode persisted UI preferences.
     async getSettings() {
         const [payload] = await this._proxy.GetSettingsAsync();
         return JSON.parse(payload);
     }
 
+    // Persist UI preferences in mutation order.
     saveSettings(options) {
         return this._enqueue(() => this._proxy.SaveSettingsAsync(
             options.show_hud, options.show_strings, options.zoom_step));
     }
 
+    // Fetch and decode the persisted camera.
     async getView() {
         const [payload] = await this._proxy.GetViewAsync();
         return JSON.parse(payload);
     }
 
+    // Create a text note and decode the returned record.
     createNote(title, content, x, y) {
         return this._enqueue(async () => {
             const [payload] = await this._proxy.CreateNoteAsync(title, content, x, y);
@@ -103,6 +113,7 @@ export class NoteService {
         });
     }
 
+    // Import an image selected through the GNOME file chooser.
     importImage(filePath, x, y) {
         return this._enqueue(async () => {
             const [payload] = await this._proxy.ImportImageAsync(filePath, x, y);
@@ -110,24 +121,29 @@ export class NoteService {
         });
     }
 
+    // Save the legacy title field and rich/plain body payload.
     updateNote(id, title, content) {
         return this._enqueue(() => this._proxy.UpdateNoteAsync(id, title, content));
     }
 
+    // Persist a note's world-space position.
     moveNote(id, x, y) {
         return this._enqueue(() => this._proxy.MoveNoteAsync(id, x, y));
     }
 
+    // Persist paper dimensions and rotation.
     updateGeometry(id, width, height, rotation) {
         return this._enqueue(() =>
             this._proxy.UpdateGeometryAsync(id, width, height, rotation));
     }
 
+    // Fetch and decode all red-string edges.
     async listConnections() {
         const [payload] = await this._proxy.ListConnectionsAsync();
         return JSON.parse(payload);
     }
 
+    // Create or retrieve the edge between two note pins.
     createConnection(sourceId, targetId) {
         return this._enqueue(async () => {
             const [payload] = await this._proxy.CreateConnectionAsync(sourceId, targetId);
@@ -135,14 +151,17 @@ export class NoteService {
         });
     }
 
+    // Remove one edge.
     deleteConnection(id) {
         return this._enqueue(() => this._proxy.DeleteConnectionAsync(id));
     }
 
+    // Remove one note and any cascading pin/edge data.
     deleteNote(id) {
         return this._enqueue(() => this._proxy.DeleteNoteAsync(id));
     }
 
+    // Persist zoom and pan in mutation order.
     saveView(zoom, panX, panY) {
         return this._enqueue(() => this._proxy.SaveViewAsync(zoom, panX, panY));
     }

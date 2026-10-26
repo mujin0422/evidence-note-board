@@ -1,3 +1,7 @@
+/* GNOME Shell presentation only; geometry and persistence stay in JavaScript.
+ * Class groups follow the board, toolbar/popovers, paper/editor and pin/string
+ * actors created by BoardView. */
+
 .evidence-board-root {
     background-color: #111111;
 }

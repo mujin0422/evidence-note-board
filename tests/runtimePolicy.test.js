@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {singleScreenLayout,curveVisible,reconnectDelay}
-    from '../extension/productionMath.js';
+    from '../extension/core/runtimePolicy.js';
 
 test('one screen places controls at constant stage coordinates',()=>{
     const a=singleScreenLayout(1920,1080);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pinCenter, worldToScreen, menuNearPin, stringGeometry, stringControlPoints, nearestTargetPin}
-    from '../extension/stringMath.js';
+import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
+    from '../extension/geometry/stringMath.js';
 
 const first = {id:'a',x:100,y:200,width:270,height:185,rotation:0};
 const second = {id:'b',x:620,y:300,width:200,height:100,rotation:0};
@@ -24,10 +24,11 @@ test('menu stays in viewport near right and bottom edge', () => {
 });
 
 test('string anchor sticks to pin and updates under move / rotation', () => {
-    const original = stringGeometry(first,second);
+    const original = stringControlPoints(pinCenter(first),pinCenter(second));
     assert.deepEqual(original.a,pinCenter(first));
     assert.deepEqual(original.b,pinCenter(second));
-    const moved = stringGeometry(first,{...second,x:second.x+30,rotation:30});
+    const moved = stringControlPoints(pinCenter(first),
+        pinCenter({...second,x:second.x+30,rotation:30}));
     assert.notDeepEqual(moved.b,original.b);
     assert.ok(moved.c1.y > original.a.y);
 });

@@ -1,0 +1,16 @@
+[Unit]
+Description=Evidence Note Board local backend
+Documentation=https://github.com/mujin0422/evidence-note-board
+After=dbus.socket
+
+[Service]
+Type=dbus
+BusName=io.github.mujin0422.EvidenceNoteBoard
+ExecStart=/usr/bin/evidence-note-boardd
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

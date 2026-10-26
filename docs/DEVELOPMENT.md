@@ -21,10 +21,13 @@ backend/
 extension/
   metadata.json              # GNOME Shell 50 major
   extension.js               # enable/disable lifecycle
-  boardView.js               # camera, pointer interaction, note editor
-  noteService.js             # async D-Bus client; mutation queue
-  canvasMath.js              # pure JS camera math
   stylesheet.css             # charcoal and paper cards
+  ui/boardView.js            # compositor actors, camera and note editor
+  services/noteService.js    # async D-Bus client; mutation queue
+  input/                     # double-click, hold/drag and hit-test helpers
+  model/                     # note-content compatibility and rich text
+  geometry/                  # pure camera, card, pin and string math
+  core/runtimePolicy.js      # defaults, screen layout and reconnect policy
 db/migrations/0001_init.sql   # migration v1
 packaging/evidence-note-board.service
 scripts/
@@ -45,8 +48,8 @@ docs/phases/
 ```bash
 cargo test --manifest-path backend/Cargo.toml
 cargo fmt --manifest-path backend/Cargo.toml --check
-node --check extension/boardView.js
-node --check extension/noteService.js
+node --check extension/ui/boardView.js
+node --check extension/services/noteService.js
 node --test tests/canvasMath.test.js
 python3 tests/check_migration.py
 bash -n scripts/*.sh

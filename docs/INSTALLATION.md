@@ -1,5 +1,17 @@
 # INSTALLATION — Fedora GNOME Classic 50.5 / Wayland
 
+## Cài từ RPM
+
+Repository đã có spec Fedora tại
+[`packaging/evidence-note-board.spec`](../packaging/evidence-note-board.spec).
+Xem [`packaging/README.md`](../packaging/README.md) để tạo source archive,
+cài build dependencies và build bằng `rpmbuild` hoặc `mock`. RPM cài backend,
+GNOME extension, systemd user unit và D-Bus activation entry vào `/usr`; dữ
+liệu người dùng vẫn nằm trong thư mục XDG của từng tài khoản.
+
+Các mục bên dưới dành cho **development build từ source** và cài vào
+`~/.local`.
+
 ## Cách cài được khuyến nghị: một lần và tự chạy sau login
 
 ```bash
@@ -16,7 +28,9 @@ Bạn không cần chạy thủ công `daemon-reload`, `enable`,
 
 ---
 
-**Lưu ý:** Đây là build từ source, không có RPM. Đừng thử trên desktop quan trọng khi chưa có backup/sẵn phương án disable extension.
+**Lưu ý:** Đây là luồng build development từ source, không phải thao tác cài
+RPM. Đừng thử trên desktop quan trọng khi chưa có backup/sẵn phương án disable
+extension.
 
 ## 1. Kiểm tra môi trường
 

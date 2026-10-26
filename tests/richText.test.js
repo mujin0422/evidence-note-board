@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {decodeRichText,encodeRichText,richTextForNote,normalizeBoldSpans,
     toggleBoldSpans,rebaseBoldSpans,byteOffsetForCharacter,selectionIsBold}
-    from '../extension/richText.js';
+    from '../extension/model/richText.js';
 
 test('plain notes, malformed documents and reserved-prefix text are safe',()=>{
     assert.deepEqual(decodeRichText('Nội dung cũ'),{text:'Nội dung cũ',bold:[]});

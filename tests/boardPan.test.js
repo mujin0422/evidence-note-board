@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BOARD_DRAG_THRESHOLD_PX,boardDragHasStarted,dragBoardView,
     boardDimensions,zoomBoardAt,worldToScreen}
-    from '../extension/canvasMath.js';
+    from '../extension/geometry/canvasMath.js';
 
 const viewport={width:1920,height:1080};
 const board=boardDimensions(viewport.width,viewport.height);

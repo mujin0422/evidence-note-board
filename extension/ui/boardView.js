@@ -1,3 +1,8 @@
+// Main GNOME Shell view/controller for the board.
+//
+// This is the only extension module that owns compositor actors and input
+// signals. Pure geometry and persistence concerns stay in testable helpers;
+// every resource created here must be released by destroy().
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
 import Gio from 'gi://Gio';
@@ -7,25 +12,27 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {screenToWorld,boardDimensions,clampBoardCamera,zoomBoardAt,
-    boardDragHasStarted,dragBoardView} from './canvasMath.js';
-import {TEXT_HOLD_MS, keepTextHold} from './holdDrag.js';
-import {confineNote, validBoardPoint} from './boardBounds.js';
-import {NoteService} from './noteService.js';
-import {DoubleClickTracker} from './doubleClickTracker.js';
-import {isEmptyBoardPoint} from './noteHitTest.js';
-import {hasLegacyTitle} from './noteContent.js';
+    boardDragHasStarted,dragBoardView} from '../geometry/canvasMath.js';
+import {TEXT_HOLD_MS, keepTextHold} from '../input/holdDrag.js';
+import {confineNote, validBoardPoint} from '../geometry/boardBounds.js';
+import {NoteService} from '../services/noteService.js';
+import {DoubleClickTracker} from '../input/doubleClickTracker.js';
+import {isEmptyBoardPoint} from '../input/noteHitTest.js';
+import {hasLegacyTitle} from '../model/noteContent.js';
 import {richTextForNote,encodeRichText,toggleBoldSpans,rebaseBoldSpans,
-    byteOffsetForCharacter,characterLength} from './richText.js';
-import {PIN_SIZE, pinPosition} from './pinMath.js';
+    byteOffsetForCharacter,characterLength} from '../model/richText.js';
+import {PIN_SIZE, pinPosition} from '../geometry/pinMath.js';
 import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
-    from './stringMath.js';
-import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from './geometry.js';
+    from '../geometry/stringMath.js';
+import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from '../geometry/noteGeometry.js';
+import {boundedImageDecodeSize} from '../geometry/imageSizing.js';
 import {DEFAULT_PREFERENCES,singleScreenLayout,curveVisible,reconnectDelay}
-    from './productionMath.js';
+    from '../core/runtimePolicy.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 
 export class BoardView {
+    // Initialize state only; GNOME actors are created later by mount().
     constructor() {
         this._root = null;
         this._world = null;
@@ -58,15 +65,17 @@ export class BoardView {
         this._view = {...INITIAL_VIEW};
         this._boardSize = {width:8000,height:6000};
         this._notes = new Map();
+        this._bodyNotes = new WeakMap();
         this._timers = new Map();
         this._viewTimer = 0;
         this._service = null;
         this._backendWatchId = 0;
         this._connectionRevision = 0;
         this._alive = false;
-        this._saving = false;
+        this._statusText = '';
     }
 
+    // Attach the board to GNOME's background group and start backend discovery.
     mount() {
         const group = Main.layoutManager?._backgroundGroup;
         if (!group || typeof group.add_child !== 'function' ||
@@ -180,6 +189,7 @@ export class BoardView {
         );
     }
 
+    // Hydrate preferences, camera, connections and notes from a fresh proxy.
     async _connectBackend() {
         const revision = ++this._connectionRevision;
         const service = await NoteService.connect();
@@ -232,6 +242,7 @@ export class BoardView {
             this._setStatus(`SẴN SÀNG · ${restored} ghi chú · double-click: note · Ctrl+double-click: ảnh`);
     }
 
+    // Retry a lost backend connection using bounded exponential backoff.
     _scheduleReconnect() {
         if (!this._alive || this._reconnectTimer || this._service)
             return;
@@ -250,13 +261,16 @@ export class BoardView {
         });
     }
 
+    // Apply in-memory preferences to HUD and string visibility.
     _applyPreferences() {
         if (this._hud)
             this._hud.visible = this._preferences.show_hud;
         this._positionSettingsButton();
-        this._queueStrings();
+        // Force one redraw when hiding so Cairo clears the old wire surface.
+        this._queueStrings(true);
     }
 
+    // Apply preferences optimistically and roll back if persistence fails.
     _savePreferences(next) {
         if (!this._service) {
             this._setStatus('BACKEND OFFLINE · chưa thể lưu SETTINGS');
@@ -274,11 +288,13 @@ export class BoardView {
         });
     }
 
+    // Destroy the screen-space settings popover if open.
     _closeSettingsMenu() {
         this._settingsMenu?.destroy();
         this._settingsMenu=null;
     }
 
+    // Create or close the compact settings popover.
     _toggleSettingsMenu() {
         if (this._settingsMenu) {
             this._closeSettingsMenu();
@@ -320,6 +336,7 @@ export class BoardView {
                 y+this._settingsButton.height+5)));
     }
 
+    // Keep the settings button aligned immediately left of the HUD.
     _positionSettingsButton() {
         if (!this._hud || !this._settingsButton || !this._root)
             return;
@@ -336,16 +353,25 @@ export class BoardView {
         this._hud.set_position(left+height+gap,top);
     }
 
+    // Render a status message together with the current zoom percentage.
     _setStatus(message) {
-        this._hud?.set_text(`EVIDENCE BOARD · ${message} · ${Math.round(this._view.zoom * 100)}%`);
+        const text=`EVIDENCE BOARD · ${message} · ${Math.round(this._view.zoom * 100)}%`;
+        // Pan motion can run at the display refresh rate. Avoid relayout and
+        // notify::width/height emissions when the visible label is unchanged.
+        if (text===this._statusText)
+            return;
+        this._statusText=text;
+        this._hud?.set_text(text);
         this._positionSettingsButton();
     }
 
+    // Keep the board above wallpaper actors but below normal application UI.
     _raiseAboveWallpaper() {
         if (this._root?.get_parent() === this._backgroundGroup)
             this._backgroundGroup.set_child_above_sibling(this._root, null);
     }
 
+    // React to stage-size changes without rewriting note coordinates.
     _resize() {
         if (this._root)
             this._root.set_size(global.stage.width, global.stage.height);
@@ -383,6 +409,7 @@ export class BoardView {
         this._positionPinMenu();
     }
 
+    // Apply camera transforms and reposition dependent screen-space UI.
     _applyView() {
         if (!this._world)
             return;
@@ -394,6 +421,7 @@ export class BoardView {
         this._queueStrings();
     }
 
+    // Debounce camera persistence while marking it dirty for reconnects.
     _scheduleView() {
         if (!this._alive)
             return;
@@ -409,6 +437,7 @@ export class BoardView {
         });
     }
 
+    // Save one camera snapshot and clear dirty state only if still current.
     _persistView() {
         if (!this._service)
             return;
@@ -423,11 +452,13 @@ export class BoardView {
         });
     }
 
+    // Surface persistence failure without logging private note content.
     _saveError() {
         if (this._alive)
             this._setStatus('LỖI LƯU · kiểm tra user service');
     }
 
+    // Handle Ctrl+wheel cursor-anchored zoom.
     _scroll(event) {
         if (!this._service ||
             !(event.get_state() & Clutter.ModifierType.CONTROL_MASK))
@@ -461,6 +492,7 @@ export class BoardView {
         return Clutter.EVENT_STOP;
     }
 
+    // Clamp one note to finite world bounds and optionally persist corrections.
     _confineGeometry(note,persist=false) {
         if (!(this._boardSize.width>0 && this._boardSize.height>0))
             return;
@@ -479,16 +511,7 @@ export class BoardView {
         }
     }
 
-    _confineAllNotes(persist=false) {
-        if (!this._notes)
-            return;
-        for (const item of this._notes.values()) {
-            this._confineGeometry(item.note,persist);
-            item.actor.set_position(item.note.x,item.note.y);
-            this._applyGeometry(item.note);
-        }
-    }
-
+    // Convert a screen click to world space and create a text note.
     _createNoteAtScreen(x, y) {
         if (!this._alive || !this._service) {
             this._setStatus('BACKEND OFFLINE · kiểm tra user service');
@@ -519,6 +542,7 @@ export class BoardView {
             });
     }
 
+    // Open the native file chooser and import the selected image asynchronously.
     async _chooseImage(screenPoint=null) {
         if (!this._service || !this._alive) {
             this._setStatus('BACKEND OFFLINE · không thể nhập ảnh');
@@ -580,13 +604,13 @@ export class BoardView {
         }
     }
 
-    _applyGeometry(note) {
+    // Apply only position-dependent state during a drag, avoiding relayout.
+    _applyPosition(note) {
         const item = this._notes.get(note.id);
         if (!item)
             return;
         this._confineGeometry(note);
         item.actor.set_position(note.x,note.y);
-        item.actor.set_size(note.width, note.height);
         if (item.pin) {
             const point = pinPosition(note);
             item.pin.set_position(point.x, point.y);
@@ -594,6 +618,15 @@ export class BoardView {
         if (this._pinMenu?.noteId === note.id)
             this._positionPinMenu();
         this._queueStrings();
+    }
+
+    // Apply a note model's complete size and rotation to its actors.
+    _applyGeometry(note) {
+        const item = this._notes.get(note.id);
+        if (!item)
+            return;
+        this._applyPosition(note);
+        item.actor.set_size(note.width, note.height);
         item.actor.set_pivot_point(0.5, 0.5);
         item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
         if (note.type === 'image') {
@@ -605,6 +638,24 @@ export class BoardView {
         }
     }
 
+    // Write geometry only when it differs from the last successful snapshot.
+    _persistGeometry(note) {
+        const item=this._notes.get(note.id);
+        if (!item || !this._service)
+            return Promise.resolve();
+        const next={width:note.width,height:note.height,rotation:note.rotation};
+        const old=item.persistedGeometry;
+        if (old && old.width===next.width && old.height===next.height &&
+            old.rotation===next.rotation)
+            return Promise.resolve();
+        return this._service.updateGeometry(note.id,next.width,next.height,next.rotation)
+            .then(()=>{
+                if (this._alive && this._notes.get(note.id)===item)
+                    item.persistedGeometry=next;
+            });
+    }
+
+    // Convert character-based bold spans into Pango byte attributes.
     _applyBoldAttributes(item) {
         if (!item?.body)
             return;
@@ -619,6 +670,7 @@ export class BoardView {
         item.body.set_attributes(list);
     }
 
+    // Toggle bold for the editor's current selection.
     _toggleBoldOnSelection(item) {
         const body=item.body;
         const text=body.get_text();
@@ -636,6 +688,7 @@ export class BoardView {
         this._scheduleNote(item.note.id);
     }
 
+    // Grow text paper to its measured content height and keep it on-board.
     _syncTextHeight(note) {
         const item = this._notes.get(note.id);
         if (!item?.body || !this._alive)
@@ -654,6 +707,7 @@ export class BoardView {
         }
     }
 
+    // Create the independent pushpin actor and bind its pointer actions.
     _installPin(note) {
         const item = this._notes.get(note.id);
         if (!item)
@@ -710,6 +764,7 @@ export class BoardView {
         pin.set_position(point.x, point.y);
     }
 
+    // Destroy the active pin action popover.
     _closePinMenu() {
         if (!this._pinMenu)
             return;
@@ -717,6 +772,7 @@ export class BoardView {
         this._pinMenu = null;
     }
 
+    // Anchor the pin popover in screen space so it does not scale with zoom.
     _positionPinMenu() {
         if (!this._pinMenu || !this._root)
             return;
@@ -730,6 +786,7 @@ export class BoardView {
         actor.set_position(point.x, point.y);
     }
 
+    // Open or close actions for a specific note pin.
     _togglePinMenu(note) {
         if (this._pinMenu?.noteId === note.id) {
             this._closePinMenu();
@@ -786,6 +843,7 @@ export class BoardView {
         this._positionPinMenu();
     }
 
+    // Begin a temporary red string from one note pin.
     _startString(note, event) {
         const [x, y] = event.get_coords();
         this._stringDraft = {sourceId: note.id,
@@ -795,6 +853,7 @@ export class BoardView {
         this._queueStrings();
     }
 
+    // Cancel the in-progress string and repaint without the preview.
     _cancelString() {
         if (!this._stringDraft)
             return;
@@ -802,6 +861,7 @@ export class BoardView {
         this._queueStrings();
     }
 
+    // Persist a draft string once it reaches a valid target pin.
     _completeString(targetId) {
         const draft = this._stringDraft;
         if (!draft || draft.sourceId === targetId || !this._service)
@@ -820,6 +880,7 @@ export class BoardView {
             });
     }
 
+    // Remove a persisted connection and update the drawing layer.
     _removeString(id) {
         if (!this._service)
             return;
@@ -832,7 +893,12 @@ export class BoardView {
         }).catch(() => this._saveError());
     }
 
-    _queueStrings() {
+    // Coalesce multiple red-string repaint requests into one idle callback.
+    _queueStrings(force=false) {
+        // A disabled wire layer needs one forced repaint to clear old pixels,
+        // then camera/note motion can skip all further Cairo work.
+        if (!force && !this._preferences.show_strings)
+            return;
         if (!this._alive || !this._stringsLayer || this._paintTimer)
             return;
         this._paintTimer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,16,()=>{
@@ -843,6 +909,7 @@ export class BoardView {
         });
     }
 
+    // Paint visible saved and draft strings onto the stage-sized Cairo layer.
     _paintStrings(area) {
         const cr = area.get_context();
         try {
@@ -882,6 +949,7 @@ export class BoardView {
         }
     }
 
+    // Require a second explicit action before deleting a pinned note.
     _deletePinnedNote(note) {
         if (!this._service || !this._alive || this._deletingNotes.has(note.id))
             return;
@@ -915,6 +983,7 @@ export class BoardView {
         }).finally(() => this._deletingNotes.delete(id));
     }
 
+    // Build a non-editable Polaroid actor for an imported local image.
     _renderImageNote(note) {
         if (!this._alive || this._notes.has(note.id))
             return;
@@ -933,20 +1002,29 @@ export class BoardView {
         const texture = St.TextureCache.get_default();
         const file = Gio.File.new_for_path(note.asset_path);
         const paintScale = St.ThemeContext.get_for_stage(global.stage).scaleFactor;
-        const photo = texture.load_file_async(file, -1, -1, paintScale, 1.0);
+        const photoWidth=Math.max(60,note.width-24);
+        const photoHeight=Math.max(60,note.height-48);
+        const decodeSize=boundedImageDecodeSize(photoWidth,photoHeight,paintScale);
+        // Decode near the displayed size instead of retaining the original
+        // multi-megapixel bitmap inside the long-lived gnome-shell process.
+        // Large resized cards are capped to a predictable texture budget.
+        const photo = texture.load_file_async(file,
+            decodeSize.width,decodeSize.height,paintScale,1.0);
         photo.set_content_gravity(Clutter.ContentGravity.RESIZE_ASPECT);
         photo.set_reactive(false);
-        photo.set_size(Math.max(60, note.width - 24),
-            Math.max(60, note.height - 48));
+        photo.set_size(photoWidth,photoHeight);
         paper.add_child(photo);
 
-        this._notes.set(note.id, {note, actor: paper, photo});
+        this._notes.set(note.id, {note, actor: paper, photo,
+            persistedGeometry:{width:note.width,height:note.height,
+                rotation:note.rotation}});
         this._world.add_child(paper);
         this._connectPaperGestures(paper, note);
         this._installPin(note);
         this._applyGeometry(note);
     }
 
+    // Interpret blank-board presses as create gestures or pending camera pans.
     _press(event) {
         if (!this._service)
             return Clutter.EVENT_PROPAGATE;
@@ -999,6 +1077,7 @@ export class BoardView {
         return Clutter.EVENT_PROPAGATE;
     }
 
+    // Advance a camera-pan session after its movement threshold is crossed.
     _moveBoardPan(event,x,y) {
         const session=this._boardPan;
         if (!session)
@@ -1028,6 +1107,7 @@ export class BoardView {
         return Clutter.EVENT_STOP;
     }
 
+    // Finish camera panning and persist the final camera immediately.
     _endBoardPan() {
         const session=this._boardPan;
         this._boardPan=null;
@@ -1045,6 +1125,7 @@ export class BoardView {
         return session.active;
     }
 
+    // Acquire a stage grab for resize/rotate gestures that must not escape.
     _beginGrab() {
         if (this._grab)
             return false;
@@ -1058,6 +1139,7 @@ export class BoardView {
         }
     }
 
+    // Initialize note-drag state from a stage coordinate.
     _beginNoteDrag(note,x,y) {
         if (!this._service || !this._alive || this._dragPoint)
             return false;
@@ -1068,6 +1150,7 @@ export class BoardView {
         return true;
     }
 
+    // Start a primary-button note drag without taking a stage grab.
     _startNoteDrag(event, note) {
         // Stage capture sees motion/release even when Clutter.Text or a
         // sibling actor would swallow the bubbling event. Do not grab.
@@ -1078,6 +1161,7 @@ export class BoardView {
             ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
     }
 
+    // Cancel the timer that distinguishes text selection from paper dragging.
     _cancelTextHold() {
         const pending=this._textHold;
         if (!pending)
@@ -1087,6 +1171,7 @@ export class BoardView {
             GLib.Source.remove(pending.timer);
     }
 
+    // Turn a stationary long press in text into a paper drag.
     _startTextHold(event,note) {
         if (event.get_button()!==1 || !this._service || this._dragPoint ||
             (event.get_state() & (Clutter.ModifierType.CONTROL_MASK |
@@ -1106,6 +1191,7 @@ export class BoardView {
         });
     }
 
+    // Hit-test paper borders and begin drag, resize or rotation.
     _startPaperGesture(event, note, paper) {
         if (event.get_button() !== 1 || !this._service)
             return Clutter.EVENT_PROPAGATE;
@@ -1132,6 +1218,7 @@ export class BoardView {
         return Clutter.EVENT_STOP;
     }
 
+    // Bind paper-level gestures while preserving native text editing.
     _connectPaperGestures(paper, note) {
         paper.connect('button-press-event', (_actor, event) => {
             const result = this._startPaperGesture(event, note, paper);
@@ -1153,6 +1240,7 @@ export class BoardView {
         });
     }
 
+    // Observe stage events that child actors may consume before bubbling.
     _capturedPointer(event) {
         if (!this._alive)
             return Clutter.EVENT_PROPAGATE;
@@ -1161,13 +1249,9 @@ export class BoardView {
         // consume them on GNOME 50. Keep the body handler as a fallback.
         if (type === Clutter.EventType.BUTTON_PRESS &&
             event.get_button()===1 && !this._dragPoint) {
-            const source=event.get_source();
-            for (const item of this._notes.values()) {
-                if (item.body===source) {
-                    this._startTextHold(event,item.note);
-                    break;
-                }
-            }
+            const note=this._bodyNotes.get(event.get_source());
+            if (note)
+                this._startTextHold(event,note);
         }
         if (type === Clutter.EventType.KEY_PRESS && this._stringDraft &&
             event.get_key_symbol() === Clutter.KEY_Escape) {
@@ -1235,6 +1319,7 @@ export class BoardView {
         return Clutter.EVENT_PROPAGATE;
     }
 
+    // Recover and persist when a button release is lost outside the actor.
     _releaseAsAborted() {
         if (!this._dragPoint)
             return false;
@@ -1246,11 +1331,11 @@ export class BoardView {
             this._service?.moveNote(note.id, note.x, note.y)
                 .catch(() => this._saveError());
         else if (resize)
-            this._service?.updateGeometry(resize.id, resize.width,
-                resize.height, resize.rotation).catch(() => this._saveError());
+            this._persistGeometry(resize).catch(() => this._saveError());
         return true;
     }
 
+    // Apply the current drag/resize/rotate motion to its note model.
     _motion(event) {
         if (!this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
@@ -1281,20 +1366,20 @@ export class BoardView {
         if (this._dragNote) {
             this._dragNote.x+=dx/this._view.zoom;
             this._dragNote.y+=dy/this._view.zoom;
-            this._applyGeometry(this._dragNote);
-            this._queueStrings();
+            this._applyPosition(this._dragNote);
         }
         this._dragPoint = {x, y};
         return Clutter.EVENT_STOP;
     }
 
+    // Commit a completed note transform on primary-button release.
     _release(event) {
         if (!this._dragPoint)
             return Clutter.EVENT_PROPAGATE;
         if (this._resizeSession && event.get_button() === 1) {
             const {note} = this._resizeSession;
             this._endDrag();
-            this._service?.updateGeometry(note.id, note.width, note.height, note.rotation)
+            this._persistGeometry(note)
                 .catch(() => this._saveError());
             return Clutter.EVENT_STOP;
         }
@@ -1307,6 +1392,7 @@ export class BoardView {
         return Clutter.EVENT_PROPAGATE;
     }
 
+    // Clear transform state and dismiss any active stage grab.
     _endDrag() {
         this._cancelTextHold();
         this._resizeSession = null;
@@ -1316,6 +1402,7 @@ export class BoardView {
         this._grab = null;
     }
 
+    // Build an editable text-paper actor and wire autosave behavior.
     _renderNote(note, focus = false) {
         if (note.type === 'image')
             return this._renderImageNote(note);
@@ -1369,7 +1456,10 @@ export class BoardView {
         this._connectPaperGestures(paper, note);
 
         const item={note,actor:paper,body,
-            boldSpans:rich.bold,lastText:rich.text};
+            boldSpans:rich.bold,lastText:rich.text,
+            persistedGeometry:{width:note.width,height:note.height,
+                rotation:note.rotation}};
+        this._bodyNotes.set(body,note);
         body.connect('key-press-event',(_actor,event)=>{
             const key=event.get_key_symbol();
             if ((event.get_state() & Clutter.ModifierType.CONTROL_MASK) &&
@@ -1412,6 +1502,7 @@ export class BoardView {
             this._scheduleNote(note.id);
     }
 
+    // Debounce rich-text persistence for one dirty note.
     _scheduleNote(id) {
         if (!this._alive)
             return;
@@ -1427,6 +1518,7 @@ export class BoardView {
         this._timers.set(id, source);
     }
 
+    // Persist the latest rich text and geometry snapshot for one note.
     _flushNote(id) {
         this._cancelNoteTimer(id);
         const item = this._notes.get(id);
@@ -1435,8 +1527,8 @@ export class BoardView {
         if (!item.body) // Image notes contain no editable text.
             return;
         const content=encodeRichText(item.body.get_text(),item.boldSpans);
-        // Persist geometry alongside content, preserving edit ordering.
-        this._service.updateGeometry(id, item.note.width, item.note.height, item.note.rotation)
+        // Persist geometry only if wrapping actually changed the paper size.
+        this._persistGeometry(item.note)
             .catch(() => this._saveError());
         // Leave the existing DB schema and D-Bus signature intact while
         // using an empty legacy title for body-only notes.
@@ -1450,6 +1542,7 @@ export class BoardView {
         });
     }
 
+    // Remove one note's pending autosave source.
     _cancelNoteTimer(id) {
         const source = this._timers.get(id);
         if (source)
@@ -1457,6 +1550,7 @@ export class BoardView {
         this._timers.delete(id);
     }
 
+    // Release every actor, source, signal, watcher and transient gesture.
     destroy() {
         this._endBoardPan();
         this._cancelTextHold();

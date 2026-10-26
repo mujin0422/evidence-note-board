@@ -1,8 +1,8 @@
 """Empty-board gesture wiring: static checks, not a GNOME/Wayland UI test."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-source=(root/"extension/boardView.js").read_text(encoding="utf-8")
-canvas=(root/"extension/canvasMath.js").read_text(encoding="utf-8")
+source=(root/"extension/ui/boardView.js").read_text(encoding="utf-8")
+canvas=(root/"extension/geometry/canvasMath.js").read_text(encoding="utf-8")
 assert "this._boardPan={start:{x,y},last:{x,y},active:false,changed:false}" in source
 assert "isEmptyBoardPoint(this._view,{x,y},notes,uiRects)" in source
 assert "this._doubleClick.register(event.get_time(),x,y,mode)" in source

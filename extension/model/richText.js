@@ -1,8 +1,10 @@
 // Preserve formatted text in existing notes.content, no DB migration.
 // Selection spans count Unicode code points, Pango spans count UTF-8 bytes.
 const PREFIX = '\u001eENB_RICH_TEXT_V1\n';
+// Count Unicode code points rather than UTF-16 code units.
 export const characterLength = text => Array.from(text).length;
 
+// Validate, sort and merge overlapping bold ranges.
 export function normalizeBoldSpans(spans,size) {
     if (!Array.isArray(spans)) return [];
     const valid=spans.filter(a=>Array.isArray(a)&&a.length===2&&a.every(Number.isInteger))
@@ -17,6 +19,7 @@ export function normalizeBoldSpans(spans,size) {
     return out;
 }
 
+// Decode the versioned payload, preserving unrecognized content as plain text.
 export function decodeRichText(rawInput) {
     const raw=typeof rawInput==='string'?rawInput:'';
     if (!raw.startsWith(PREFIX)) return {text:raw,bold:[]};
@@ -33,12 +36,14 @@ export function decodeRichText(rawInput) {
     }
 }
 
+// Store plain text directly unless formatting requires the versioned envelope.
 export function encodeRichText(text,spans) {
     const bold=normalizeBoldSpans(spans,characterLength(text));
     if (!bold.length&&!text.startsWith(PREFIX)) return text;
     return PREFIX+JSON.stringify({version:1,text,bold});
 }
 
+// Merge legacy titles into display text while shifting format ranges.
 export function richTextForNote(note) {
     const doc=decodeRichText(note.content);
     const title=typeof note.title==='string'?note.title:'';
@@ -49,6 +54,7 @@ export function richTextForNote(note) {
         bold:doc.bold.map(([a,b])=>[a+offset,b+offset])};
 }
 
+// Test whether every character in a selection is already bold.
 export function selectionIsBold(spans,start,end) {
     if (start>=end) return false;
     let point=start;
@@ -60,6 +66,7 @@ export function selectionIsBold(spans,start,end) {
     return false;
 }
 
+// Add bold to a selection, or remove it when fully bold.
 export function toggleBoldSpans(spans,start,end,length) {
     const old=normalizeBoldSpans(spans,length);
     if (!Number.isInteger(start)||!Number.isInteger(end)||start<0||end>length||
@@ -77,6 +84,7 @@ export function toggleBoldSpans(spans,start,end,length) {
     return normalizeBoldSpans(remaining,length);
 }
 
+// Move formatting ranges across one contiguous text edit.
 export function rebaseBoldSpans(previous,current,spans) {
     const before=Array.from(previous),after=Array.from(current);
     const ranges=normalizeBoldSpans(spans,before.length);
@@ -100,6 +108,7 @@ export function rebaseBoldSpans(previous,current,spans) {
     return normalizeBoldSpans(updated,after.length);
 }
 
+// Convert a Unicode character index to the UTF-8 byte offset Pango expects.
 export function byteOffsetForCharacter(text,position) {
     let bytes=0;
     const chars=Array.from(text);

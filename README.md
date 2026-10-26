@@ -307,11 +307,43 @@ python3 tests/check_extension.py
 
 Xem [TESTING](docs/TESTING.md) và [Phase 2 test checklist](docs/phases/PHASE_02.md).
 
+## Cấu trúc repository
+
+| Thư mục | Vai trò |
+|---|---|
+| `backend/` | User service viết bằng Rust: validate input, quản lý SQLite/asset/settings và cung cấp API D-Bus cho extension. |
+| `db/migrations/` | Schema SQLite được nhúng vào backend; lưu note, camera, pin, asset và connection. |
+| `extension/` | GNOME Shell extension viết bằng GJS: render board, nhận input, chỉnh sửa note và gọi backend qua D-Bus. |
+| `packaging/` | Fedora RPM spec cùng systemd/D-Bus service cho bản RPM và development local. |
+| `scripts/` | Script build, cài dev, smoke test, benchmark và backup/restore dữ liệu. |
+| `tests/` | Unit/static/integration checks chạy được mà không cần khởi động GNOME compositor thật. |
+| `docs/` | Kiến trúc, cài đặt, quy trình phát triển và checklist nghiệm thu theo phase. |
+| `.github/workflows/` | Pipeline CI chạy kiểm tra extension, backend và tạo artifact. |
+| `dist/` | ZIP extension sinh ra khi build; không commit vì có thể tái tạo. |
+
+`backend/Cargo.lock` nên được commit vì backend là một executable; lockfile giúp local build và CI dùng cùng phiên bản dependency.
+
+Các module trong `extension/` được nhóm theo trách nhiệm:
+
+```text
+extension/
+├── extension.js             # entrypoint enable/disable của GNOME Shell
+├── metadata.json            # UUID và phiên bản GNOME được hỗ trợ
+├── stylesheet.css           # giao diện board, note, menu và pin
+├── ui/boardView.js          # actor compositor và điều phối tương tác
+├── services/noteService.js  # D-Bus client gọi Rust backend
+├── input/                   # nhận diện double-click, hold/drag, hit-test
+├── model/                   # nội dung note và rich-text serialization
+├── geometry/                # camera, bounds, resize, pin và dây đỏ
+└── core/runtimePolicy.js    # defaults, single-screen và reconnect policy
+```
+
 ## Tài liệu
 
 - [ARCHITECTURE](docs/ARCHITECTURE.md) — sơ đồ, D-Bus contract, persistence, rủi ro.
 - [DEVELOPMENT](docs/DEVELOPMENT.md) — module, Git workflow từ `dev`, kiểm tra.
 - [INSTALLATION](docs/INSTALLATION.md) — cài backend + extension, vận hành.
+- [RPM packaging](packaging/README.md) — payload, source archive và quy trình build RPM Fedora.
 - [TESTING](docs/TESTING.md) — phân biệt automatic và on-device.
 - [PHASE_01](docs/phases/PHASE_01.md) — kết quả/giới hạn của phase trước.
 - [PHASE_02](docs/phases/PHASE_02.md) — deliverables, acceptance, danh sách chưa xác minh.
