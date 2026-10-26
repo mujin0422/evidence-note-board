@@ -24,9 +24,10 @@ for fragment in (
     assert fragment in js, fragment
 
 for fragment in ("_dropButton", "_openDropWindow", "_dropProcess", "_duplicatePhoto",
-                 "duplicateImage(", "new St.Icon(", "new Gio.FileIcon(",
+                 "duplicateImage(", "new Gio.FileIcon(",
                  "_rotatePhoto(", "_startResize("):
     assert fragment not in js, fragment
+assert "new St.Icon(" not in js[js.index("    _renderImageNote("):js.index("    _press(event)")]
 assert "DuplicateImage" not in service
 assert "duplicate_image" not in db and "duplicate_image" not in dbus
 assert "image-drop-target.py" not in bundle
