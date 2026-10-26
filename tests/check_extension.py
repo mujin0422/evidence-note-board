@@ -22,7 +22,10 @@ required = {
     "core/runtimePolicy.js",
 }
 assert all((ext / path).is_file() for path in required)
-zip_path = ROOT / "dist/evidence-note-board-gnome50-phase2.zip"
+with (ROOT / "backend/Cargo.toml").open("rb") as manifest:
+    import tomllib
+    version=tomllib.load(manifest)["package"]["version"]
+zip_path = ROOT / f"dist/evidence-note-board-{version}-gnome50.zip"
 if zip_path.exists():
     with zipfile.ZipFile(zip_path) as archive:
         assert set(archive.namelist()) == required

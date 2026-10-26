@@ -60,8 +60,9 @@ jobs:
       - name: Upload extension ZIP
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: evidence-note-board-gnome50-phase2
-          path: dist/evidence-note-board-gnome50-phase2.zip
+          name: evidence-note-board-extension-zip
+          path: dist/*-gnome50.zip
+          if-no-files-found: error
 
   backend:
     runs-on: ubuntu-latest
@@ -84,3 +85,32 @@ jobs:
         with:
           name: evidence-note-boardd-linux-x86_64-ci
           path: backend/target/release/evidence-note-boardd
+
+  rpm:
+    name: Fedora 44 RPM and installation payload
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:44
+    steps:
+      - name: Install Fedora build tools
+        run: |
+          dnf -y install git rust cargo gcc pkgconf-pkg-config sqlite-devel \
+            rpm-build rpmdevtools systemd-rpm-macros nodejs python3 \
+            tar gzip coreutils findutils cpio which
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build offline RPM from locked vendored source
+        run: bash scripts/build-rpm.sh
+      - name: Inspect produced RPM metadata and contents
+        run: |
+          bash scripts/check-built-rpm.sh dist
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Upload tested Fedora RPM, SRPM and extension ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: evidence-note-board-fedora44-release-candidate
+          path: |
+            dist/evidence-note-board-[0-9]*.x86_64.rpm
+            dist/evidence-note-board-[0-9]*.src.rpm
+            dist/*-gnome50.zip
+            dist/SHA256SUMS
+          if-no-files-found: error

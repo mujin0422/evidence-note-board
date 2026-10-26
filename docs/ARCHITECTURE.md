@@ -123,3 +123,18 @@ tác SQLite ngắn. No GPU frames benchmark is inferred from this approach.
 SQLite backup and SHA-verified asset restore are an explicit CLI workflow,
 not an automatic destructive recovery on app startup. See
 [PHASE_05](phases/PHASE_05.md).
+
+## Distribution (Phase 6)
+
+System RPM and local development installs target **different directories**:
+RPM delivers Rust daemon under `/usr/bin`, system D-Bus/systemd user
+entries under `/usr/share`/`/usr/lib`, and global GNOME extension
+under `/usr/share/gnome-shell/extensions`. Developer scripts deliver
+per-user overrides under `~/.local` and `~/.config/systemd/user`;
+the user must remove those *code* overrides when switching to RPM.
+Both installations share the SAME preserved XDG data/settings folders.
+
+RPM source archive vendors Cargo.lock-verified Rust dependencies; binary
+RPM compiles offline with system SQLite and Fedora toolchain.
+No compositor automation runs inside Fedora CI container.
+See [PHASE_06](phases/PHASE_06.md).

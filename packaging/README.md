@@ -1,55 +1,74 @@
-# RPM packaging
+# Fedora 44 RPM packaging
 
-Thư mục này chứa hai nhóm service file:
+Phase 6 builds a real **binary RPM**, **source RPM** and versioned GNOME
+extension ZIP from the same committed Git tree. Supported runtime:
+**Fedora 44, GNOME Shell 50.x, Wayland (GNOME Classic tested by owner)**.
 
-- `evidence-note-board.service` và
-  `io.github.mujin0422.EvidenceNoteBoard.service.in`: cài development vào
-  `~/.local/`; không đưa vào binary RPM.
-- `evidence-note-board-rpm.service` và
-  `io.github.mujin0422.EvidenceNoteBoard-rpm.service`: cài system-wide vào
-  `/usr`; được `evidence-note-board.spec` sử dụng.
-
-## Nội dung binary RPM
-
-RPM chỉ cài:
-
-- Rust backend vào `/usr/bin/evidence-note-boardd`;
-- backup CLI vào `/usr/bin/evidence-note-board-backup`;
-- GNOME extension vào `/usr/share/gnome-shell/extensions/`;
-- systemd user unit vào `/usr/lib/systemd/user/`;
-- D-Bus activation entry vào `/usr/share/dbus-1/services/`;
-- license và tài liệu người dùng.
-
-Test, script development, cache Cargo, ZIP trong `dist/` và tài liệu phase không
-nằm trong `%files`.
-
-## Tạo source archive local
-
-Commit toàn bộ thay đổi trước, bao gồm `backend/Cargo.lock`, rồi chạy:
+## Build from source on Fedora 44
 
 ```bash
-version=0.2.0
-mkdir -p "$HOME/rpmbuild/SOURCES"
-git archive --format=tar.gz \
-  --prefix="evidence-note-board-${version}/" \
-  -o "$HOME/rpmbuild/SOURCES/evidence-note-board-${version}.tar.gz" \
-  HEAD
+sudo dnf install git rust cargo gcc sqlite-devel pkgconf-pkg-config \
+  rpm-build rpmdevtools systemd-rpm-macros nodejs python3 \
+  tar gzip coreutils findutils cpio
+git clone https://github.com/mujin0422/evidence-note-board.git
+cd evidence-note-board
+git switch dev  # after Phase 6 PR has merged
+bash scripts/build-rpm.sh
+bash scripts/check-built-rpm.sh dist
+(cd dist && sha256sum -c SHA256SUMS)
 ```
 
-## Cài build dependencies và build
+The build script creates an isolated SRPM work tree using `git archive HEAD`.
+It copies all Rust crates at **locked** versions into `vendor/` via
+`cargo vendor --locked`; these checksummed sources are included only in the
+source RPM. Cargo uses `--offline --locked --no-default-features` during
+rpmbuild, linking **system SQLite**. Crate downloads are required only
+during the source-vendoring step, never at RPM build time.
 
-```bash
-sudo dnf install rpm-build rpmdevtools dnf-plugins-core rust-packaging \
-  sqlite-devel nodejs python3
-sudo dnf builddep packaging/evidence-note-board.spec
-rpmbuild -ba packaging/evidence-note-board.spec
-```
+Artifacts are deposited in `dist/`:
+- `evidence-note-board-0.2.0-1.fc44.x86_64.rpm` (filename may vary with dist)
+- `evidence-note-board-0.2.0-1.fc44.src.rpm`
+- `evidence-note-board-0.2.0-gnome50.zip`
+- `SHA256SUMS`
 
-Spec sử dụng Fedora Cargo macros với `-n` (`--no-default-features`) để backend
-liên kết system SQLite thay vì feature `bundled-sqlite` dùng cho development.
-Dynamic BuildRequires sẽ báo rõ crate Rust nào còn thiếu trong repository của
-Fedora. Nên chạy build cuối trong `mock` trước khi phát hành.
+The RPM installs the Rust backend in `/usr/bin`, GNOME extension under
+`/usr/share/gnome-shell/extensions/<uuid>/`, systemd **user** unit under
+`/usr/lib/systemd/user/`, D-Bus activator under
+`/usr/share/dbus-1/services/`, plus a backup CLI. It includes runtime
+`zenity` for importing images. No root process is run for the board.
 
-CI chạy `python3 tests/check_rpm_packaging.py` để phát hiện sai lệch giữa spec,
-phiên bản Cargo, license và đường dẫn service. Đây là kiểm tra tĩnh; nó không
-thay thế lần build RPM thật bằng `rpmbuild` hoặc `mock`.
+The spec uses standard systemd RPM user scriptlets; **installing an RPM
+does not automatically enable an extension for an existing GNOME user**.
+See [INSTALLATION](../docs/INSTALLATION.md).
+
+## Upgrade from development installation
+
+The old `scripts/setup-dev.sh` installs its own copies in `~/.local`
+and `~/.config/systemd/user`. **Those paths can override system RPM files.**
+Before switching, first back up the database and image assets, then
+manually disable extension, stop service, remove old local extension,
+user unit, D-Bus service entry and local binary (not user data).
+Precise commands are in [INSTALLATION](../docs/INSTALLATION.md).
+
+**Never delete `~/.local/share/evidence-note-board/` when uninstalling.**
+Also preserve `~/.config/evidence-note-board/settings.json`.
+
+## CI / release
+
+- `.github/workflows/ci.yml`: JavaScript/Python/Rust CI and **real Fedora 44
+  RPM build + metadata and checksums inspection** on each PR/push.
+- `.github/workflows/release.yml`: accepts intentional stable tag `vX.Y.Z`,
+  validates tag == Cargo/RPM versions, runs the same offline Fedora package
+  build/tests, generates release notes and checksums, then publishes Release.
+- Workflow permissions are read-only except the release job with
+  `contents: write`; actions are pinned by commit SHA.
+- Artifacts are **not GPG-signed RPMs**. Download over GitHub HTTPS and
+  compare `SHA256SUMS`. A signed COPR publishing flow is not configured
+  without credentials and separate packaging review.
+
+## Caveats
+
+- Fedora 44/GNOME 50 only; **no guarantee on Fedora 43/45, KDE, X11**.
+- CI containers verify compiled RPM + payload, not GNOME desktop behavior.
+- Installation/upgrade/uninstall tests in a real user session remain a
+  manual release acceptance gate. See [PHASE_06](../docs/phases/PHASE_06.md).
