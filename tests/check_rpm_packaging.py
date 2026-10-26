@@ -1,68 +1,67 @@
 #!/usr/bin/env python3
-"""Check invariants shared by the Fedora RPM spec and project metadata.
-
-This intentionally performs only static checks, so it can run in CI without
-installing Fedora's rpmbuild toolchain. A real `rpmbuild` or `mock` build is
-still required before publishing a package.
-"""
-
+"""Validate a shippable RPM spec, offline source build and CI delivery."""
 from pathlib import Path
+import importlib.util
+import re
+import sys
 import tomllib
 
+ROOT=Path(__file__).resolve().parents[1]
+with (ROOT/"backend/Cargo.toml").open("rb") as f:
+    cargo=tomllib.load(f)
+spec=(ROOT/"packaging/evidence-note-board.spec").read_text()
+unit=(ROOT/"packaging/evidence-note-board-rpm.service").read_text()
+dbus=(ROOT/"packaging/io.github.mujin0422.EvidenceNoteBoard-rpm.service").read_text()
+dev=(ROOT/"packaging/evidence-note-board.service").read_text()
+script=(ROOT/"scripts/build-rpm.sh").read_text()
+ci=(ROOT/".github/workflows/ci.yml").read_text()
+release=(ROOT/".github/workflows/release.yml").read_text()
+version=cargo["package"]["version"]
 
-ROOT = Path(__file__).resolve().parents[1]
-SPEC = ROOT / "packaging/evidence-note-board.spec"
-RPM_UNIT = ROOT / "packaging/evidence-note-board-rpm.service"
-RPM_DBUS = ROOT / "packaging/io.github.mujin0422.EvidenceNoteBoard-rpm.service"
-DEV_UNIT = ROOT / "packaging/evidence-note-board.service"
+def contains(text,*parts):
+    for part in parts:
+        assert part in text,part
 
-
-def require(text: str, fragment: str, source: Path) -> None:
-    """Raise a useful error when a packaging contract fragment is missing."""
-    assert fragment in text, f"{source.relative_to(ROOT)} is missing: {fragment}"
-
-
-def main() -> None:
-    """Validate versions, paths, licensing, and system-library build policy."""
-    cargo_path = ROOT / "backend/Cargo.toml"
-    cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
-    spec = SPEC.read_text(encoding="utf-8")
-    rpm_unit = RPM_UNIT.read_text(encoding="utf-8")
-    rpm_dbus = RPM_DBUS.read_text(encoding="utf-8")
-    dev_unit = DEV_UNIT.read_text(encoding="utf-8")
-    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
-
-    package = cargo["package"]
-    features = cargo["features"]
-    version = package["version"]
-
-    require(spec, f"Version:        {version}", SPEC)
-    require(spec, "License:        MIT", SPEC)
-    require(spec, "%license LICENSE", SPEC)
-    assert package["license"] == "MIT", "backend/Cargo.toml must use MIT"
-    require(license_text, "MIT License", ROOT / "LICENSE")
-
-    assert features["default"] == ["bundled-sqlite"]
-    assert features["bundled-sqlite"] == ["rusqlite/bundled"]
-    require(spec, "BuildRequires:  pkgconfig(sqlite3)", SPEC)
-    require(spec, "%cargo_generate_buildrequires -n", SPEC)
-    require(spec, "%cargo_build -n", SPEC)
-    require(spec, "%cargo_test -n", SPEC)
-    require(spec, "%cargo_install -n", SPEC)
-
-    require(spec, "%{_datadir}/gnome-shell/extensions/%{uuid}/", SPEC)
-    require(spec, "%{_userunitdir}/evidence-note-board.service", SPEC)
-    require(spec, "%{_datadir}/dbus-1/services/", SPEC)
-    require(spec, "%systemd_user_post evidence-note-board.service", SPEC)
-
-    require(rpm_unit, "ExecStart=/usr/bin/evidence-note-boardd", RPM_UNIT)
-    require(rpm_dbus, "Exec=/usr/bin/evidence-note-boardd", RPM_DBUS)
-    require(dev_unit, "ExecStart=%h/.local/bin/evidence-note-boardd", DEV_UNIT)
-    assert "%h/.local" not in rpm_unit
-    assert "%h/.local" not in rpm_dbus
-
-    print("RPM packaging metadata: OK")
-
-
-if __name__ == "__main__":
-    main()
+contains(spec,f"Version:        {version}","License:        MIT",
+    "%license LICENSE","Source0:        %{name}-%{version}.tar.gz",
+    "BuildRequires:  pkgconfig(sqlite3)","Requires:       zenity",
+    "Requires:       gnome-shell >= 50","Requires:       gnome-shell < 51",
+    "cargo build --manifest-path backend/Cargo.toml --release --locked --offline --no-default-features",
+    "cargo test --manifest-path backend/Cargo.toml --locked --offline --no-default-features",
+    "%{_userunitdir}/evidence-note-board.service",
+    "%{_datadir}/gnome-shell/extensions/%{uuid}/",
+    "%systemd_user_post evidence-note-board.service",
+    "%systemd_user_preun evidence-note-board.service",
+    "%systemd_user_postun_with_restart evidence-note-board.service")
+assert "cargo_generate_buildrequires" not in spec
+assert "cargo-rpm-macros" not in spec
+assert cargo["package"]["license"]=="MIT"
+assert cargo["features"]["default"]==["bundled-sqlite"]
+contains((ROOT/"LICENSE").read_text(),"MIT License")
+contains(unit,"ExecStart=/usr/bin/evidence-note-boardd")
+contains(dbus,"Exec=/usr/bin/evidence-note-boardd")
+contains(dev,"ExecStart=%h/.local/bin/evidence-note-boardd")
+contains(script,"git archive --format=tar HEAD","cargo vendor --locked",
+    "rpmbuild -ba","scripts/verify-release-artifacts.py",
+    "SHA256SUMS","scripts/build-extension.sh")
+contains(ci,"container:","fedora:44","scripts/build-rpm.sh","actions/upload-artifact@")
+contains(release,"tags:","scripts/check-release-version.py",
+    "scripts/build-rpm.sh","gh release create",
+    "contents: write","--verify-tag","SHA256SUMS")
+assert 'password=' not in release.lower()
+assert (ROOT/".github/workflows/release.yml").exists()
+module=importlib.util.spec_from_file_location("release_version",ROOT/"scripts/check-release-version.py")
+spec_module=module
+loader=spec_module.loader
+assert loader is not None
+m=importlib.util.module_from_spec(spec_module)
+sys.modules["release_version"]=m
+loader.exec_module(m)
+m.check(version,"v"+version)
+try:
+    m.check(version,"v999.0.0")
+except ValueError:
+    pass
+else:
+    raise AssertionError("tag/version mismatch accepted")
+print("RPM spec, source vendor, release metadata and CI contracts: OK")

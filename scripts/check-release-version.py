@@ -8,7 +8,7 @@ import tomllib
 
 ROOT=Path(__file__).resolve().parents[1]
 def check(version: str, tag: str | None = None) -> None:
-    if not re.fullmatch(r"0|[1-9]\d*(?:\.(?:0|[1-9]\d*)){2}",version):
+    if not re.fullmatch(r"(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*)){2}",version):
         raise ValueError("Version must be stable semantic version X.Y.Z")
     with (ROOT/"backend/Cargo.toml").open("rb") as file:
         cargo=tomllib.load(file)
