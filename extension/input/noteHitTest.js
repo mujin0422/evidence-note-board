@@ -23,12 +23,18 @@ export function isEmptyBoardPoint(view, screenPoint, notes, uiRects = []) {
     return !notes.some(note => insideRect(worldPoint, note));
 }
 
+// All text actors need the same geometrical edit-region hit test for
+// blur-on-outside-click. It respects note zoom, rotation and edit handles.
+export function isTextEditorHit(note,x,y,zoom=1) {
+    return note?.type==='text' &&
+        [x,y,note.width,note.height].every(Number.isFinite) &&
+        x>=0 && y>=0 && x<=note.width && y<=note.height &&
+        gestureAt(x,y,note.width,note.height,'text',zoom)==='edit';
+}
+
 // An empty text actor can have no glyphs to pick. Its full editable
 // interior must still accept focus, including after a session reload.
 // The caller supplies rotated/zoomed paper-local pointer coordinates.
 export function isEmptyTextEditorHit(note,text,x,y,zoom=1) {
-    return note?.type==='text' && text==='' &&
-        [x,y,note.width,note.height].every(Number.isFinite) &&
-        x>=0 && y>=0 && x<=note.width && y<=note.height &&
-        gestureAt(x,y,note.width,note.height,'text',zoom)==='edit';
+    return text==='' && isTextEditorHit(note,x,y,zoom);
 }

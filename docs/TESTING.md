@@ -228,3 +228,21 @@ Unit tests cover empty vs nonempty/image, border exclusions, zoom 25–300%.
 Fedora GNOME Classic/Wayland: create an empty note, click elsewhere,
 later single-click the blank inner paper and type; log out/in and repeat.
 Also test double-click create, Ctrl+B, text selection and hold-to-move.
+
+## Focus-dependent blinking caret (post-v0.2.1)
+
+- Only the active `Clutter.Text` editor displays a blinking caret
+  (530 ms on/off); an unfocused note has no visible caret.
+- Pointer-down on blank board, Settings, pin, note border, an image or
+  another app removes the previous editor's keyboard focus without
+  swallowing the original click. Click inside any text note to refocus.
+- `notify::key-focus` at the GNOME stage handles keyboard/app focus
+  transitions; only one GLib timer exists, removed on blur, deletion,
+  and extension shutdown.
+- `tests/noteHitTest.test.js` verifies edit interiors at 25–300% zoom
+  and rejects pin, resize or drag zones; `check_note_editor.py`
+  checks source bindings.
+- Manual Fedora GNOME Classic Wayland: create empty note, see blinking
+  `|`, click black board and see it vanish; click another note and
+  confirm only its caret blinks; switch app and return; Ctrl+B, text
+  selection, long-press drag and board pan remain functional.

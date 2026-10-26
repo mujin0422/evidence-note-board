@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isEmptyBoardPoint, insideRect,isEmptyTextEditorHit} from '../extension/input/noteHitTest.js';
+import {isEmptyBoardPoint, insideRect,isEmptyTextEditorHit,isTextEditorHit} from '../extension/input/noteHitTest.js';
 
 const note = {x: 300, y: 400, width: 270, height: 185};
 
@@ -47,4 +47,19 @@ test('saved empty notes remain focusable on the interior at every zoom',()=>{
     assert.equal(isEmptyTextEditorHit({...empty,type:'image'},'',160,95,1),false);
     assert.equal(isEmptyTextEditorHit(empty,'',NaN,95,1),false);
     assert.equal(isEmptyTextEditorHit(empty,'',340,95,1),false);
+});
+
+test('focus hit test accepts blank and filled note interiors',()=>{
+    const txt={type:'text',x:100,y:200,width:320,height:185,rotation:0};
+    for (const zoom of [0.25,0.5,1,2,3]) {
+        assert.equal(isTextEditorHit(txt,160,100,zoom),true);
+        // Text editor boundaries are not the pin, drag or resize controls.
+        assert.equal(isTextEditorHit(txt,3,100,zoom),false);
+        assert.equal(isTextEditorHit(txt,160,3,zoom),false);
+        assert.equal(isTextEditorHit(txt,318,100,zoom),false);
+        assert.equal(isTextEditorHit(txt,2,2,zoom),false);
+    }
+    assert.equal(isTextEditorHit({...txt,type:'image'},160,100,1),false);
+    assert.equal(isTextEditorHit(txt,-2,100,1),false);
+    assert.equal(isTextEditorHit(txt,NaN,100,1),false);
 });
