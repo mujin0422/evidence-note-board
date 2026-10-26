@@ -17,7 +17,7 @@ import {TEXT_HOLD_MS, keepTextHold} from '../input/holdDrag.js';
 import {confineNote, validBoardPoint} from '../geometry/boardBounds.js';
 import {NoteService} from '../services/noteService.js';
 import {DoubleClickTracker} from '../input/doubleClickTracker.js';
-import {isEmptyBoardPoint} from '../input/noteHitTest.js';
+import {isEmptyBoardPoint,isEmptyTextEditorHit} from '../input/noteHitTest.js';
 import {hasLegacyTitle} from '../model/noteContent.js';
 import {richTextForNote,encodeRichText,toggleBoldSpans,rebaseBoldSpans,
     byteOffsetForCharacter,characterLength} from '../model/richText.js';
@@ -1224,13 +1224,17 @@ export class BoardView {
             const result = this._startPaperGesture(event, note, paper);
             if (result === Clutter.EVENT_STOP)
                 return result;
-            // Clicking blank inner paper should still focus the editor.
-            if (event.get_button() === 1 && event.get_source() === paper &&
-                note.type === 'text') {
-                const body = this._notes.get(note.id)?.body;
-                if (body) {
+            // Empty Clutter.Text can lose its pointer target on GNOME
+            // Wayland, so any editable paper click can refocus it.
+            if (event.get_button()===1 && note.type==='text') {
+                const body=this._notes.get(note.id)?.body;
+                if (body && (event.get_source()===paper ||
+                    body.get_text()==='')) {
                     global.stage.set_key_focus(body);
-                    body.set_cursor_position(-1);
+                    // Do not disturb selection/caret when a nonempty
+                    // Clutter.Text itself received the click.
+                    if (event.get_source()!==body)
+                        body.set_cursor_position(-1);
                 }
             }
             // Child Clutter.Text handles its own cursor. Do not let
@@ -1238,6 +1242,25 @@ export class BoardView {
             return event.get_button() === 1
                 ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
         });
+    }
+
+    // Fallback for empty papers missed by GNOME's actor picking:
+    // the stage click can land on the background although the note is
+    // drawn. Only the EDIT interior can refocus the empty text buffer.
+    _focusEmptyTextAt(stageX,stageY) {
+        for (const item of [...this._notes.values()].reverse()) {
+            const {note,actor,body}=item;
+            if (note.type!=='text' || !body || body.get_text()!=='')
+                continue;
+            const [ok,x,y]=actor.transform_stage_point(stageX,stageY);
+            if (!ok || !isEmptyTextEditorHit(note,body.get_text(),x,y,
+                this._view.zoom))
+                continue;
+            global.stage.set_key_focus(body);
+            body.set_cursor_position(-1);
+            return note;
+        }
+        return null;
     }
 
     // Observe stage events that child actors may consume before bubbling.
@@ -1249,7 +1272,14 @@ export class BoardView {
         // consume them on GNOME 50. Keep the body handler as a fallback.
         if (type === Clutter.EventType.BUTTON_PRESS &&
             event.get_button()===1 && !this._dragPoint) {
-            const note=this._bodyNotes.get(event.get_source());
+            const source=event.get_source();
+            let note=this._bodyNotes.get(source);
+            if (!note && (source===this._root || source===this._world)) {
+                // An empty paper may not be picked by the compositor.
+                // Recover focus without consuming the pointer event.
+                const [x,y]=event.get_coords();
+                note=this._focusEmptyTextAt(x,y);
+            }
             if (note)
                 this._startTextHold(event,note);
         }
@@ -1433,6 +1463,12 @@ export class BoardView {
             editable: true,
             selectable: true,
             cursor_visible: true,
+            // An empty Clutter.Text still needs the full clickable area
+            // allocated by the paper's St.BoxLayout.
+            x_expand: true,
+            y_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
+            y_align: Clutter.ActorAlign.FILL,
             single_line_mode: false,
             activatable: false,
             line_wrap: true,
