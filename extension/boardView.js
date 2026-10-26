@@ -51,6 +51,7 @@ export class BoardView {
         this._grab = null;
         this._dragPoint = null;
         this._dragNote = null;
+        this._textHold = null;
         this._view = {...INITIAL_VIEW};
         this._notes = new Map();
         this._timers = new Map();
@@ -120,6 +121,7 @@ export class BoardView {
         this._settingsButton.connect('clicked',()=>this._toggleSettingsMenu());
         this._root.add_child(this._settingsButton);
         this._hud.connect('notify::width',()=>this._positionSettingsButton());
+        this._hud.connect('notify::height',()=>this._positionSettingsButton());
 
         this._resize();
         this._setStatus('Đang kết nối backend…');
@@ -293,33 +295,38 @@ export class BoardView {
         action(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
                 show_strings:!this._preferences.show_strings}));
-        action('Zoom 100%',()=>{
-            this._view={zoom:1,panX:0,panY:0};
-            this._confineAllNotes(true);
-            this._applyView();
-            this._scheduleView();
-            this._closeSettingsMenu();
-        });
         action('Đóng',()=>this._closeSettingsMenu());
-        menu.set_size(212,198);
+        // Only three actions remain. Derive height from child allocation
+        // rather than keeping the old 198px rectangle and blank bottom.
+        const popupWidth=208;
+        menu.set_width(popupWidth);
         this._root.add_child(menu);
+        const [,naturalHeight]=menu.get_preferred_height(popupWidth);
+        if (naturalHeight>0)
+            menu.set_height(Math.ceil(naturalHeight));
         this._settingsMenu=menu;
         const [x,y]=this._settingsButton.get_position();
-        menu.set_position(Math.max(0,Math.min(this._root.width-216,x-160)),
-            Math.max(0,Math.min(this._root.height-244,y+43)));
+        const popupHeight=menu.height||naturalHeight||120;
+        menu.set_position(
+            Math.max(0,Math.min(this._root.width-popupWidth-8,x)),
+            Math.max(0,Math.min(this._root.height-popupHeight-8,
+                y+this._settingsButton.height+5)));
     }
 
     _positionSettingsButton() {
         if (!this._hud || !this._settingsButton || !this._root)
             return;
-        // Use the HUD's current preferred width; never hardcode 242px.
-        // Clamp to stage bounds so Settings remains clickable at all times.
-        const [,natural]=this._hud.get_preferred_width(-1);
-        const buttonWidth=Math.max(40,this._settingsButton.width);
-        const edge=Math.max(8,this._root.width-buttonWidth-12);
-        const x=this._hud.visible ?
-            Math.min(edge,22+natural+8) : 22;
-        this._settingsButton.set_position(Math.max(8,x),55);
+        // Both actors use the same natural HUD height; Settings is a
+        // square placed to the LEFT of the HUD, not the previous large
+        // 55px button. Keep the HUD clickable region out of the button.
+        const [,naturalHeight]=this._hud.get_preferred_height(-1);
+        const height=Math.max(28,Math.ceil(naturalHeight||this._hud.height||34));
+        if (this._settingsButton.width!==height ||
+            this._settingsButton.height!==height)
+            this._settingsButton.set_size(height,height);
+        const left=22,top=55,gap=7;
+        this._settingsButton.set_position(left,top);
+        this._hud.set_position(left+height+gap,top);
     }
 
     _setStatus(message) {
@@ -986,16 +993,52 @@ export class BoardView {
         }
     }
 
+    _beginNoteDrag(note,x,y) {
+        if (!this._service || !this._alive || this._dragPoint)
+            return false;
+        this._cancelTextHold();
+        this._doubleClick.reset();
+        this._dragPoint={x,y};
+        this._dragNote=note;
+        return true;
+    }
+
     _startNoteDrag(event, note) {
-        // Stage event capture sees mouse-up even when pin's own release
-        // signal returns STOP. Do NOT grab the root for pin dragging:
-        // the old grab swallowed the release and left notes stuck.
-        if (event.get_button() !== 1 || !this._service || this._dragPoint)
+        // Stage capture sees motion/release even when Clutter.Text or a
+        // sibling actor would swallow the bubbling event. Do not grab.
+        if (event.get_button() !== 1)
             return Clutter.EVENT_PROPAGATE;
-        const [x, y] = event.get_coords();
-        this._dragPoint = {x, y};
-        this._dragNote = note;
-        return Clutter.EVENT_STOP;
+        const [x,y]=event.get_coords();
+        return this._beginNoteDrag(note,x,y)
+            ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
+    }
+
+    _cancelTextHold() {
+        const pending=this._textHold;
+        if (!pending)
+            return;
+        this._textHold=null;
+        if (pending.timer)
+            GLib.Source.remove(pending.timer);
+    }
+
+    _startTextHold(event,note) {
+        if (event.get_button()!==1 || !this._service || this._dragPoint ||
+            (event.get_state() & (Clutter.ModifierType.CONTROL_MASK |
+                Clutter.ModifierType.SHIFT_MASK)))
+            return;
+        this._cancelTextHold();
+        const [x,y]=event.get_coords();
+        const candidate={note,x,y,timer:0};
+        this._textHold=candidate;
+        candidate.timer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,330,()=>{
+            candidate.timer=0;
+            if (this._textHold===candidate) {
+                this._textHold=null;
+                this._beginNoteDrag(note,candidate.x,candidate.y);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _startPaperGesture(event, note, paper) {
@@ -1007,6 +1050,8 @@ export class BoardView {
         if (!ok)
             return Clutter.EVENT_PROPAGATE;
         const kind = gestureAt(lx, ly, note.width, note.height, note.type, this._view.zoom);
+        if (kind !== 'edit')
+            this._cancelTextHold();
         if (kind === 'edit')
             return Clutter.EVENT_PROPAGATE;
         if (kind === 'drag')
@@ -1054,6 +1099,15 @@ export class BoardView {
         }
         if (type === Clutter.EventType.MOTION) {
             const [x, y] = event.get_coords();
+            if (this._textHold) {
+                const candidate=this._textHold;
+                const distance=Math.hypot(x-candidate.x,y-candidate.y);
+                // Short click+drag still selects text normally. Only a
+                // stationary 330ms press claims the gesture for moving.
+                if (distance>7 ||
+                    !(event.get_state() & Clutter.ModifierType.BUTTON1_MASK))
+                    this._cancelTextHold();
+            }
             if (this._dragPoint) {
                 // Recover if release occurred outside the desktop actor.
                 const button=Clutter.ModifierType.BUTTON1_MASK;
@@ -1072,6 +1126,8 @@ export class BoardView {
             }
         }
         if (type === Clutter.EventType.BUTTON_RELEASE) {
+            if (event.get_button()===1)
+                this._cancelTextHold();
             if (this._dragPoint) {
                 const result = this._release(event);
                 if (result === Clutter.EVENT_STOP)
@@ -1164,6 +1220,7 @@ export class BoardView {
     }
 
     _endDrag() {
+        this._cancelTextHold();
         this._resizeSession = null;
         this._dragPoint = null;
         this._dragNote = null;
@@ -1212,8 +1269,11 @@ export class BoardView {
             Math.max(120, note.width - 32),
             Math.max(90, note.height - 85)
         );
-        body.connect('button-press-event', () => {
+        body.connect('button-press-event', (_actor,event) => {
             global.stage.set_key_focus(body);
+            // A quick drag highlights words (Ctrl+B stays intact).
+            // Hold the text for ~330ms before moving to drag the paper.
+            this._startTextHold(event,note);
             return Clutter.EVENT_PROPAGATE;
         });
         paper.add_child(body);
@@ -1310,6 +1370,7 @@ export class BoardView {
     }
 
     destroy() {
+        this._cancelTextHold();
         this._cancelString();
         this._closePinMenu();
         this._deletingNotes.clear();
