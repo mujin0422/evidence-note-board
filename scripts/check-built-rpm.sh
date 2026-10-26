@@ -27,7 +27,7 @@ done
 grep -Fq "zenity" <<< "$deps"
 grep -Fq "gnome-shell" <<< "$deps"
 # rpm user-unit scriptlets must exist; local developer paths must not.
-grep -Eiq 'systemctl.*--user|systemd.*user' <<< "$scripts" || {
+grep -Eiq 'systemctl|systemd' <<< "$scripts" || {
     echo "Systemd user scriptlet missing" >&2
     exit 1
 }

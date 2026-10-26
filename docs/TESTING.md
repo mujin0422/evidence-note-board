@@ -201,3 +201,18 @@ giấy, ảnh rồi thả, note dừng ngay. Click-kéo nhanh trên text vẫn t
 - `python3 tests/check_board_pan.py`: đảm bảo event routing trên
   Stage giữ ưu tiên note drag, text selection, double-click và release.
 - Kiểm tra thực tế trên GNOME Wayland: xem checklist Phase 5.
+
+## Phase 6 RPM/Release
+
+- `python3 tests/check_rpm_packaging.py`: full Fedora spec paths/runtime
+  deps/offline locked build and release workflow wiring.
+- `python3 tests/check_release.py`: version validation and checksum/
+  extension artifact manifest contracts.
+- `bash scripts/build-rpm.sh`: creates source tarball with vendored crates,
+  invokes Fedora `rpmbuild -ba`, including Rust, Node and Python tests.
+- `bash scripts/check-built-rpm.sh dist`: verifies RPM package file list,
+  runtime requirements and systemd scriptlets.
+- `(cd dist && sha256sum -c SHA256SUMS)`: integrity of RPM/SRPM/ZIP.
+- RPM built in **Fedora container CI** is not equivalent to GNOME Shell
+  Wayland desktop acceptance. See
+  [PHASE_06](phases/PHASE_06.md) for release gates.

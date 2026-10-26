@@ -74,3 +74,12 @@ Thử theo docs/phases/PHASE_02.md. Để kiểm tra persistence: tạo note, s�
 ## Quy tắc triển khai
 
 Không truy cập SQLite từ GNOME Shell main thread. Không ghi database mỗi pixel kéo chuột. Không giả lập giao diện với persistence giả. Không ghi nội dung note vào logs. Không dùng sudo chạy binary hoặc extension. Không hứa hỗ trợ GNOME Classic nếu chưa test compositor thật.
+
+## Phase 6 release engineering
+
+`scripts/build-rpm.sh` requires Fedora rpm-build toolchain, creates an
+offline vendored SRPM and real RPM via `rpmbuild -ba`, plus extension
+ZIP and checksum manifest. Do not commit `vendor/` or `dist/`.
+CI builds Fedora 44 RPM in container and checks its metadata; tag `vX.Y.Z`
+triggers release workflow only after merge and Fedora acceptance.
+Check [PHASE_06](phases/PHASE_06.md) for operator instructions.
