@@ -33,15 +33,13 @@ class BackupRestoreTests(unittest.TestCase):
             test_bin=Path(temp)/"test-bin"
             test_bin.mkdir()
             systemctl=test_bin/"systemctl"
-            systemctl.write_text(
-                "#!/bin/sh\\n"
-                "if [ \\"$1\\" != \\"--user\\" ] || [ \\"$2\\" != \\"is-active\\" ] || "
-                "[ \\"$3\\" != \\"--quiet\\" ] || "
-                "[ \\"$4\\" != \\"evidence-note-board.service\\" ]; then exit 99; fi\\n"
-                "if [ \\"${ENB_TEST_SYSTEMCTL_ACTIVE:-0}\\" = \\"1\\" ]; "
-                "then exit 0; fi\\n"
-                "exit 3\\n",
-                encoding="utf-8")
+            systemctl.write_text("""#!/bin/sh
+if [ "$1" != "--user" ] || [ "$2" != "is-active" ] || \
+   [ "$3" != "--quiet" ] || \
+   [ "$4" != "evidence-note-board.service" ]; then exit 99; fi
+if [ "${ENB_TEST_SYSTEMCTL_ACTIVE:-0}" = "1" ]; then exit 0; fi
+exit 3
+""", encoding="utf-8")
             systemctl.chmod(0o755)
             env={**os.environ,"XDG_DATA_HOME":str(base),
                 "PATH":str(test_bin)+os.pathsep+os.environ.get("PATH","")}
