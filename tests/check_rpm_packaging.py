@@ -41,7 +41,8 @@ contains((ROOT/"LICENSE").read_text(),"MIT License")
 contains(unit,"ExecStart=/usr/bin/evidence-note-boardd")
 contains(dbus,"Exec=/usr/bin/evidence-note-boardd")
 contains(dev,"ExecStart=%h/.local/bin/evidence-note-boardd")
-contains(script,"git archive --format=tar HEAD","cargo vendor --locked",
+contains(script,"git archive --format=tar HEAD","tar -C \"$ROOT\" --exclude=",
+    "cargo vendor --locked",
     "rpmbuild -ba","scripts/verify-release-artifacts.py",
     "SHA256SUMS","scripts/build-extension.sh")
 contains(ci,"container:","fedora:44","scripts/build-rpm.sh","actions/upload-artifact@")

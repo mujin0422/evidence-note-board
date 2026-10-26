@@ -11,9 +11,14 @@ for command in git cargo rpmbuild tar python3 sha256sum; do
         exit 1
     }
 done
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "Commit tracked changes before building a release source archive" >&2
-    exit 1
+# GitHub container jobs can expose a checkout without a usable .git
+# directory to subprocesses. Prefer committed Git when available; otherwise
+# package exactly the CI-checked-out files without build caches or user data.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "Commit tracked changes before building a release source archive" >&2
+        exit 1
+    fi
 fi
 version="$(python3 - <<'PY'
 import tomllib
@@ -28,8 +33,15 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 tree="$work/$name-$version"
 mkdir -p "$tree" "$work/rpmbuild/"{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-# Use checked-in content (not working-tree files) for all release sources.
-git archive --format=tar HEAD | tar -xf - -C "$tree"
+# In a working Git repository, archive the exact commit. CI fallback
+# includes only the checked-out source tree and excludes generated files.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git archive --format=tar HEAD | tar -xf - -C "$tree"
+else
+    tar -C "$ROOT" --exclude='./.git' --exclude='./dist' \
+        --exclude='./rpmbuild' --exclude='./backend/target' \
+        -cf - . | tar -xf - -C "$tree"
+fi
 mkdir -p "$tree/.cargo"
 echo "Vendoring locked Cargo dependencies for $version..."
 (

@@ -57,3 +57,7 @@ Do **not** publish before all checks above are complete.
   logged out/in to verify extension state.
 - **Release complete**: verified tag workflow succeeded AND artifacts are
   publicly present under Releases, not merely on PR or CI page.
+
+CI build note: Fedora container checkouts that do not expose .git to subprocesses
+use a source-only tar fallback excluding build artifacts, while local builds
+with a usable Git repository use a committed git archive.
