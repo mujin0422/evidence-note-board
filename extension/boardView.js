@@ -6,9 +6,10 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {screenToWorld} from './canvasMath.js';
+import {screenToWorld,boardDimensions,clampBoardCamera,zoomBoardAt}
+    from './canvasMath.js';
 import {TEXT_HOLD_MS, keepTextHold} from './holdDrag.js';
-import {confineNote, maxZoomThatFits, validBoardPoint} from './boardBounds.js';
+import {confineNote, validBoardPoint} from './boardBounds.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
@@ -54,6 +55,7 @@ export class BoardView {
         this._dragNote = null;
         this._textHold = null;
         this._view = {...INITIAL_VIEW};
+        this._boardSize = {width:8000,height:6000};
         this._notes = new Map();
         this._timers = new Map();
         this._viewTimer = 0;
@@ -84,7 +86,8 @@ export class BoardView {
             reactive: false,
             layout_manager: new Clutter.FixedLayout(),
         });
-        this._world.set_size(4000, 3000);
+        this._boardSize=boardDimensions(global.stage.width,global.stage.height);
+        this._world.set_size(this._boardSize.width,this._boardSize.height);
         this._world.set_pivot_point(0, 0);
         this._root.add_child(this._world);
         // Screen-sized overlay is below the world actor (paper/pins).
@@ -195,15 +198,17 @@ export class BoardView {
         this._applyPreferences();
         this._connections = new Map(connections.map(c => [c.id, c]));
         this._queueStrings();
-        // Retire pan offsets saved by older releases.
-        const requestedZoom=!this._dirtyView && Number.isFinite(view.zoom)
-            ? Math.max(0.25,Math.min(3,view.zoom)) : this._view.zoom;
-        const maxZoom=maxZoomThatFits(notes.map(n=>
-            confineNote(n,global.stage.width,global.stage.height,1)),
-            global.stage.width,global.stage.height);
-        this._view={zoom:Math.min(requestedZoom,maxZoom),panX:0,panY:0};
+        // Preserve the camera's saved zoom and viewport; the screen is
+        // only a window onto a much larger finite board.
+        const requested=!this._dirtyView && Number.isFinite(view.zoom) &&
+            Number.isFinite(view.pan_x) && Number.isFinite(view.pan_y)
+            ? {zoom:view.zoom,panX:view.pan_x,panY:view.pan_y}
+            : this._view;
+        this._view=clampBoardCamera(requested,
+            {width:global.stage.width,height:global.stage.height},this._boardSize);
         this._applyView();
-        if (view.pan_x!==0 || view.pan_y!==0 || view.zoom!==this._view.zoom)
+        if (view.pan_x!==this._view.panX ||
+            view.pan_y!==this._view.panY || view.zoom!==this._view.zoom)
             this._scheduleView();
         let restored = 0;
         let failed = 0;
@@ -352,22 +357,25 @@ export class BoardView {
             this._stringsLayer.set_size(global.stage.width, global.stage.height);
             this._queueStrings();
         }
-        // A compositor resize may report intermediate allocations during
-        // mode changes. Debounce before mutating/persisting note positions.
+        // Resize the canvas (if necessary), then clamp the viewport
+        // only. Never move/save all note coordinates on a display resize.
         if (this._resizeTimer)
             GLib.Source.remove(this._resizeTimer);
         this._resizeTimer=GLib.timeout_add(GLib.PRIORITY_DEFAULT,150,()=>{
             this._resizeTimer=0;
             if (this._alive && global.stage.width >= 400 && global.stage.height >= 300) {
-                const limit=maxZoomThatFits(
-                    [...this._notes.values()].map(item=>item.note),
-                    global.stage.width,global.stage.height);
-                if (this._view.zoom>limit) {
-                    this._view={zoom:limit,panX:0,panY:0};
+                this._boardSize=boardDimensions(global.stage.width,
+                    global.stage.height,this._boardSize);
+                this._world?.set_size(this._boardSize.width,this._boardSize.height);
+                const camera=clampBoardCamera(this._view,
+                    {width:global.stage.width,height:global.stage.height},
+                    this._boardSize);
+                if (camera.panX!==this._view.panX ||
+                    camera.panY!==this._view.panY) {
+                    this._view=camera;
                     this._applyView();
                     this._scheduleView();
                 }
-                this._confineAllNotes(true);
             }
             return GLib.SOURCE_REMOVE;
         });
@@ -377,10 +385,10 @@ export class BoardView {
     _applyView() {
         if (!this._world)
             return;
-        this._world.set_scale(this._view.zoom, this._view.zoom);
-        this._world.set_position(0,0);
+        this._world.set_scale(this._view.zoom,this._view.zoom);
+        this._world.set_position(this._view.panX,this._view.panY);
         if (this._service)
-            this._setStatus('Ctrl+Wheel: zoom · giữ/kéo pin hoặc mép giấy');
+            this._setStatus('Ctrl+Wheel: zoom board · giữ/kéo pin hoặc mép giấy');
         this._positionPinMenu();
         this._queueStrings();
     }
@@ -420,7 +428,8 @@ export class BoardView {
     }
 
     _scroll(event) {
-        if (!this._service || !(event.get_state() & Clutter.ModifierType.CONTROL_MASK))
+        if (!this._service ||
+            !(event.get_state() & Clutter.ModifierType.CONTROL_MASK))
             return Clutter.EVENT_PROPAGATE;
         const direction=event.get_scroll_direction();
         let factor;
@@ -434,27 +443,29 @@ export class BoardView {
         } else {
             return Clutter.EVENT_PROPAGATE;
         }
-        if (!Number.isFinite(factor)||factor<=0)
+        if (!Number.isFinite(factor) || factor<=0)
             return Clutter.EVENT_PROPAGATE;
-        // Zoom from origin only. Never change panX/panY; stop zooming in
-        // before any paper or pin could leave the physical viewport.
-        const maxZoom=maxZoomThatFits(
-            [...this._notes.values()].map(item=>item.note),
-            global.stage.width,global.stage.height);
-        const zoom=Math.max(0.25,Math.min(maxZoom,this._view.zoom*factor));
-        if (Math.abs(zoom-this._view.zoom)<0.00001)
+        const [x,y]=event.get_coords();
+        // Zoom BOARD around cursor. Distant notes may go offscreen:
+        // they remain inside the board at unchanged world coordinates.
+        const next=zoomBoardAt(this._view,{x,y},
+            this._view.zoom*factor,
+            {width:global.stage.width,height:global.stage.height},
+            this._boardSize);
+        if (Math.abs(next.zoom-this._view.zoom)<0.00001)
             return Clutter.EVENT_STOP;
-        this._view={zoom,panX:0,panY:0};
+        this._view=next;
         this._applyView();
         this._scheduleView();
         return Clutter.EVENT_STOP;
     }
 
     _confineGeometry(note,persist=false) {
-        if (!(global.stage.width>0 && global.stage.height>0))
+        if (!(this._boardSize.width>0 && this._boardSize.height>0))
             return;
         const previous={x:note.x,y:note.y,width:note.width,height:note.height};
-        const fixed=confineNote(note,global.stage.width,global.stage.height,this._view.zoom);
+        // Only clamp to WORLD boundaries, never to the on-screen viewport.
+        const fixed=confineNote(note,this._boardSize.width,this._boardSize.height,1);
         Object.assign(note,{x:fixed.x,y:fixed.y,
             width:fixed.width,height:fixed.height});
         if (persist && this._service) {
@@ -634,7 +645,7 @@ export class BoardView {
             return;
         const [, pixels] = layout.get_pixel_size();
         const required=Math.min(requiredPaperHeight(pixels),
-            Math.max(185,global.stage.height/this._view.zoom-60));
+            Math.max(185,this._boardSize.height-60));
         if (note.height !== required) {
             note.height = required;
             this._applyGeometry(note);

@@ -35,3 +35,34 @@ export function zoomAt(view, cursor, requestedZoom) {
 export function panBy(view, dx, dy) {
     return {...view, panX: view.panX + dx, panY: view.panY + dy};
 }
+
+// Large finite WORLD-SPACE board independent of the monitor viewport.
+// Even at 25% zoom the board spans a full single-monitor screen.
+export const BASE_BOARD_WIDTH = 8000;
+export const BASE_BOARD_HEIGHT = 6000;
+
+export function boardDimensions(stageWidth,stageHeight,previous={width:0,height:0}) {
+    const width=Number.isFinite(stageWidth)&&stageWidth>0?stageWidth:1920;
+    const height=Number.isFinite(stageHeight)&&stageHeight>0?stageHeight:1080;
+    return {
+        width:Math.ceil(Math.max(BASE_BOARD_WIDTH,width/MIN_ZOOM,previous.width||0)),
+        height:Math.ceil(Math.max(BASE_BOARD_HEIGHT,height/MIN_ZOOM,previous.height||0)),
+    };
+}
+
+// Restrict the *camera* to the finite board, not the cards to the viewport.
+// A sheet may be invisible until the user zooms out or into that region.
+export function clampBoardCamera(view,viewport,board) {
+    const zoom=clampZoom(view.zoom);
+    const minX=Math.min(0,viewport.width-board.width*zoom);
+    const minY=Math.min(0,viewport.height-board.height*zoom);
+    const px=Number.isFinite(view.panX)?view.panX:0;
+    const py=Number.isFinite(view.panY)?view.panY:0;
+    return {zoom,
+        panX:Math.max(minX,Math.min(0,px)),
+        panY:Math.max(minY,Math.min(0,py))};
+}
+
+export function zoomBoardAt(view,cursor,requestedZoom,viewport,board) {
+    return clampBoardCamera(zoomAt(view,cursor,requestedZoom),viewport,board);
+}
