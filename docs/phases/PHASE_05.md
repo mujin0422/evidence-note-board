@@ -233,3 +233,39 @@ Theo phản hồi người dùng, zoom bị dừng khi note nằm xa nhau vì
 - [ ] Menu pin, red strings, text editor Ctrl+B, thao tác kéo
       note và settings vẫn hoạt động, không có JS ERROR.
 - [ ] Logout/login: zoom/camera và vị trí note/ảnh khôi phục đúng.
+
+## 26/10/2026 — Hold-drag vùng trống để khám phá board
+
+Sau khi nghiệm thu PR #23 (zoom board 25–300%, không ép note vào viewport),
+triển khai thao tác **kéo viewport bằng chuột trái trên vùng trống**.
+
+- Trên `_root.button-press-event`, sau khi loại trừ UI và hitbox note,
+  nếu click đầu tiên chưa đủ tạo double-click thì đặt **pending board
+  pan**. Nhấp thông thường không làm dịch chuyển.
+- Bắt `global.stage.captured-event`: nếu vẫn giữ BUTTON1 và rê
+  **>=6px**, kích hoạt kéo viewport. `dragBoardView()` chỉ thay đổi
+  camera panX/panY, clamp trong kích thước board qua
+  `clampBoardCamera()`; note, asset, pins, string DB không đổi.
+- Khi nhả chuột trái, kết thúc ngay và lưu view; nếu mất release
+  ngoài actor, motion tiếp theo không có BUTTON1 tự kết thúc.
+- Double-click vẫn tạo note; Ctrl+double-click nhập ảnh; phím Ctrl+B,
+  drag pin, long-press text, edit, resize và nối dây đỏ không bị chiếm
+  gesture. Không re-enable middle-button pan.
+- `Ctrl+Wheel` vẫn zoom theo con trỏ và hoạt động với các note xa nhau.
+
+### Nghiệm thu Fedora Wayland
+
+- [ ] Click vùng trống và thả: camera không nhúc nhích
+- [ ] Giữ chuột trái, kéo vùng trống: thấy note/ảnh trượt theo màn hình,
+      nhưng vị trí trong world board không đổi
+- [ ] Thả ngay khi đang kéo: board dừng, không dính vào con trỏ
+- [ ] Kéo sang các phía tới sát board: khung nhìn dừng ở mép board
+- [ ] Kéo ở zoom 25%, 100%, 300%: chuyển động đồng nhất theo pixel chuột
+- [ ] Double-click vùng trống: đúng một note; Ctrl+double-click: một ảnh
+- [ ] Kéo pin/ảnh/note và Ctrl+B vẫn như cũ, không kéo viewport ngoài ý muốn
+- [ ] Dây đỏ và pin menu di chuyển đúng theo khung nhìn
+- [ ] Đăng xuất/đăng nhập lại: khung nhìn vẫn ở vùng đã kéo
+- [ ] Không có JS ERROR hoặc tình trạng chuột bị grab
+
+CI gồm unit tests `boardPan.test.js` và source contracts; chỉ Fedora
+GNOME Classic/Wayland mới xác nhận được sự kiện chuột trong compositor.

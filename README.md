@@ -1,5 +1,38 @@
 # Evidence Note Board
 
+## Kéo nền board để xem vùng khác
+
+Màn hình hiển thị một phần của board 8.000 × 6.000 world units.
+Giờ bạn có thể **nhấn giữ chuột trái vào vùng trống**, rê chuột để
+di chuyển cửa sổ nhìn board, rồi thả để dừng. Vị trí khung nhìn
+được lưu qua D-Bus/SQLite và khôi phục sau đăng xuất/đăng nhập.
+
+- **Giữ chuột trái + kéo vùng trống:** di chuyển khung nhìn (viewport).
+  Phải rê ít nhất 6 pixel; chỉ nhấn một lần không dịch chuyển.
+- **Nhấp đúp vùng trống:** tạo note văn bản; **Ctrl + nhấp đúp:**
+  nhập ảnh. Kéo nền sẽ hủy nhận diện double-click để không tạo note.
+- **Giữ pin/mép giấy/ảnh:** di chuyển chính note/ảnh, không kéo board.
+  **Giữ khoảng 330ms trên phần chữ:** di chuyển note chữ.
+- **Chọn chữ/Ctrl+B, kéo dây đỏ và popup Settings:** giữ nguyên.
+- **Ctrl + lăn chuột:** zoom 25–300% tại vị trí con trỏ, vẫn giữ
+  note trong biên board. Kéo viewport không thay đổi tọa độ note/ảnh.
+- Khi kéo đến mép board, viewport tự dừng, không hiển thị vùng ngoài
+  board. Không mở lại thao tác pan bằng chuột giữa.
+
+Cài bản thử GNOME Wayland:
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch -c feat/phase5-hold-drag-board-viewport --track origin/feat/phase5-hold-drag-board-viewport
+bash scripts/setup-dev.sh
+```
+
+Đăng xuất rồi đăng nhập lại GNOME Classic Wayland. Không xóa SQLite
+hoặc assets. Xem [Phase 5](docs/phases/PHASE_05.md) để nghiệm thu.
+
+---
+
 ## Zoom toàn bộ board (Phase 5 hotfix)
 
 - **Ctrl + lăn chuột:** phóng to/thu nhỏ board tại vị trí con trỏ,

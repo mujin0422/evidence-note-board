@@ -192,3 +192,12 @@ giấy, ảnh rồi thả, note dừng ngay. Click-kéo nhanh trên text vẫn t
   và kéo note.
 - GNOME Wayland: bắt buộc nghiệm thu camera khi scroll, text editor,
   pin menu, dây đỏ và persistence thực tế.
+
+## Hold-and-drag empty board viewport
+
+- `node --test tests/boardPan.test.js`: ngưỡng rê 6px, giữ zoom
+  25–300%, pan theo pixel chuột, camera dừng ở mép board, note
+  world-space không đổi, zoom theo vị trí con trỏ sau pan.
+- `python3 tests/check_board_pan.py`: đảm bảo event routing trên
+  Stage giữ ưu tiên note drag, text selection, double-click và release.
+- Kiểm tra thực tế trên GNOME Wayland: xem checklist Phase 5.

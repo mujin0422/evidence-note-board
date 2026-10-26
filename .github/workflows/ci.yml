@@ -29,7 +29,7 @@ jobs:
           node --check extension/richText.js
           node --check extension/holdDrag.js
       - name: Camera tests
-        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js tests/pinMath.test.js tests/stringMath.test.js tests/productionMath.test.js tests/boardBounds.test.js tests/richText.test.js tests/holdDrag.test.js tests/boardZoom.test.js
+        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js tests/pinMath.test.js tests/stringMath.test.js tests/productionMath.test.js tests/boardBounds.test.js tests/richText.test.js tests/holdDrag.test.js tests/boardZoom.test.js tests/boardPan.test.js
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py
@@ -44,6 +44,7 @@ jobs:
           python3 tests/check_autostart.py
           python3 tests/check_phase5.py
           python3 tests/check_board_interactions.py
+          python3 tests/check_board_pan.py
           python3 tests/check_rich_editor.py
           python3 tests/check_compact_hud_drag.py
           python3 -m unittest discover -s tests -p 'test_backup.py'
