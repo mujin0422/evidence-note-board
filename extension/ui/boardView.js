@@ -1274,9 +1274,11 @@ export class BoardView {
             event.get_button()===1 && !this._dragPoint) {
             const source=event.get_source();
             let note=this._bodyNotes.get(source);
-            if (!note && (source===this._root || source===this._world)) {
-                // An empty paper may not be picked by the compositor.
-                // Recover focus without consuming the pointer event.
+            if (!note) {
+                // GNOME may pick the paper, pin overlay, or a world child
+                // instead of the zero-glyph Clutter.Text. Resolve the
+                // editable interior geometrically for any source; the hit
+                // test excludes pin, resize and drag borders.
                 const [x,y]=event.get_coords();
                 note=this._focusEmptyTextAt(x,y);
             }

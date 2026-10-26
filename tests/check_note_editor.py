@@ -31,6 +31,8 @@ for token in (
     "y_align: Clutter.ActorAlign.FILL",
     "_focusEmptyTextAt(stageX,stageY)",
     "this._focusEmptyTextAt(x,y)",
+    "if (!note) {",
+    "note=this._focusEmptyTextAt(x,y);",
     "isEmptyTextEditorHit(note,body.get_text(),x,y,",
     "if (event.get_source()!==body)",
 ):
