@@ -7,10 +7,13 @@ rich=(root/"extension/richText.js").read_text(encoding="utf-8")
 assert "icon_name: 'preferences-system-symbolic'" in js
 assert "icon_size: 22" in js
 assert "_positionSettingsButton()" in js
-assert "this._hud.get_preferred_width(-1)" in js
-assert "this._settingsButton.set_position(Math.max(8,x),55)" in js
+assert "this._hud.get_preferred_height(-1)" in js
+assert "this._settingsButton.set_size(height,height)" in js
+assert "this._settingsButton.set_position(left,top)" in js
+assert "this._hud.set_position(left+height+gap,top)" in js
 assert "evidence-settings-icon" in styles
-assert "min-height: 38px" in styles
+assert "padding: 0;" in styles
+assert "min-height: 0;" in styles
 for value in (
     "Pango.attr_weight_new(Pango.Weight.BOLD)", "new Pango.AttrList()",
     "byteOffsetForCharacter(text,start)", "set_attributes(list)",

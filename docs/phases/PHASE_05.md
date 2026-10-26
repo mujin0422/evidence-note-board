@@ -180,3 +180,24 @@ có thể bị chặn khi board chứa các note gần biên.
 - [ ] Gõ thêm/chèn/xóa chữ trước và sau đoạn đậm không vỡ định dạng
 - [ ] Sau logout/login văn bản thường/đậm còn nguyên, không thấy JSON
 - [ ] Pin, red strings, ảnh và camera không bị tác động
+
+## 26/10/2026 — Fix Settings popup + drag-by-hold
+
+Người dùng nghiệm thu Ctrl+B thành công nhưng yêu cầu:
+- Settings có cạnh `width=height=naturalHeight(HUD)` và nằm
+  bên **trái**, HUD được đẩy sang phải 7px. Nút Settings vẫn nhìn
+  thấy khi HUD ẩn, icon symbolic và độ tương phản giữ nguyên.
+- Popup chỉ giữ ba nút `HUD`, `Dây đỏ`, `Đóng`;
+  bỏ `Zoom 100%`. Lấy chiều cao tự nhiên từ `St.BoxLayout`, không
+  dùng chiều cao 198px nên không tạo vùng trống.
+- Drag note bằng giữ chuột: pin và mép giấy vẫn kéo ngay khi rê,
+  vùng editor hỗ trợ giữ tại chỗ 330ms rồi rê để kéo cả note.
+  Nếu rê trước khi đủ 330ms, đó là thao tác chọn văn bản thường;
+  **Ctrl+B**, nhập, copy/paste vẫn hoạt động. Bắt phím nhả từ Stage,
+  không giữ pointer grab khi kéo.
+- Mọi tọa độ của note và ảnh vẫn được giới hạn theo board như PR #20.
+  Không thêm schema DB hay thay đổi định dạng rich text.
+
+**Kiểm thử trên Fedora:** icon vuông cao bằng HUD, popup không dư
+khoảng trống, ẩn/bật HUD, giữ giấy để kéo và thả, drag pin, chọn
+chữ Ctrl+B, logout/login không mất dữ liệu.
