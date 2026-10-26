@@ -1,5 +1,33 @@
 # Evidence Note Board
 
+## Zoom toàn bộ board (Phase 5 hotfix)
+
+- **Ctrl + lăn chuột:** phóng to/thu nhỏ board tại vị trí con trỏ,
+  trong khoảng **25%–300%**, không giới hạn theo vị trí note xa nhất.
+- Board là không gian hữu hạn lớn (tối thiểu **8000 × 6000 đơn vị**
+  ở độ phân giải Full HD), và màn hình chỉ là khung nhìn một phần.
+  Note/ảnh/ghim được giới hạn trong **board**, **không** bị thu lại
+  vào màn hình mỗi lần zoom hoặc thay đổi độ phân giải.
+- Camera tự căn để không nhìn ra ngoài mép board, vị trí camera và zoom
+  lưu vào SQLite cùng view. Không mở lại thao tác middle-button pan.
+- Khi zoom, note có thể tạm nằm ngoài màn hình nhưng vẫn ở board;
+  thu nhỏ rồi zoom vào vùng cần xem để truy cập chúng.
+- Ctrl+B, kéo bằng pin/mép/giữ văn bản, red strings, HUD/Settings
+  và database ảnh/text cũ giữ nguyên.
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch -c fix/phase5-board-space-zoom --track origin/fix/phase5-board-space-zoom
+bash scripts/setup-dev.sh
+```
+
+Logout/login GNOME Classic Wayland để nạp extension. Không xóa SQLite
+hoặc thư mục ảnh. Đề nghị kiểm tra vài note đặt xa nhau, phóng lên
+100–300%, đổi con trỏ rồi zoom ra/zoom vào, kéo ảnh và ghim.
+
+---
+
 ## Phase 5 — Settings gọn cạnh HUD và kéo note bằng nhấn giữ
 
 - **Settings:** nút bánh răng là một hình vuông, chiều rộng và chiều

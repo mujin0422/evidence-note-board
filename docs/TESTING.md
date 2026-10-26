@@ -180,3 +180,15 @@ Test tay: nhấn Settings cạnh HUD, nhìn popup 3 dòng không có vùng
 trống; ẩn/bật lại HUD; giữ text 330ms rồi kéo; nhấn giữ pin, mép
 giấy, ảnh rồi thả, note dừng ngay. Click-kéo nhanh trên text vẫn tô
 đen và Ctrl+B. Lưu/khôi phục sau logout/login và kiểm tra dây đỏ.
+
+## Board-space zoom regression
+
+- `node --test tests/boardZoom.test.js`: board phủ màn hình ở
+  zoom 25%; note xa giữ world-space tọa độ; camera cursor-anchor;
+  cap 25–300% và clamp viewport **chỉ ở mép board**, không dựa vào
+  bounding box note trên màn hình.
+- `tests/check_board_interactions.py` xác minh nguồn JS không
+  còn `maxZoomThatFits` trong zoom, vẫn hỗ trợ ảnh Ctrl+double-click
+  và kéo note.
+- GNOME Wayland: bắt buộc nghiệm thu camera khi scroll, text editor,
+  pin menu, dây đỏ và persistence thực tế.

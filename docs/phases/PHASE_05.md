@@ -201,3 +201,35 @@ Người dùng nghiệm thu Ctrl+B thành công nhưng yêu cầu:
 **Kiểm thử trên Fedora:** icon vuông cao bằng HUD, popup không dư
 khoảng trống, ẩn/bật HUD, giữ giấy để kéo và thả, drag pin, chọn
 chữ Ctrl+B, logout/login không mất dữ liệu.
+
+## 26/10/2026 — Zoom BOARD thay vì ép toàn bộ note vào SCREEN
+
+Theo phản hồi người dùng, zoom bị dừng khi note nằm xa nhau vì
+`maxZoomThatFits()` ép tất cả note luôn nằm trên một màn hình.
+
+**Sửa:**
+- Board hữu hạn trong WORLD coordinates, tối thiểu 8000×6000 đơn vị;
+  tăng kích thước nếu màn hình lớn để đủ phủ viewport ở zoom tối thiểu 25%.
+- `Ctrl+Wheel` dùng `zoomBoardAt()` từ `canvasMath.js`; neo
+  tọa độ đang dưới con trỏ, hỗ trợ 25%–300% kể cả note ở xa.
+- Camera panX/panY chỉ là offset **phát sinh từ việc zoom** và
+  tự giới hạn ở mép board; **không** khôi phục thao tác chuột giữa pan.
+- `confineNote()` chỉ kiểm tra kích thước board ở tỷ lệ world=1,
+  không phụ thuộc stage.width/height hay zoom; không tự kéo/thu
+  các note ngoài viewport vào màn hình. Dây đỏ/pin menu vẫn được
+  tính từ world/screen transform camera.
+- Khi reconnect và re-login, phục hồi đúng zoom/camera đã lưu;
+  resize độ phân giải chỉ clamp camera, không đổi dữ liệu note.
+- Không đụng SQLite schema hoặc Rust backend.
+
+### Acceptance Fedora
+- [ ] Note gần + note xa (cách nhau vài nghìn world units):
+      vẫn Ctrl+Wheel zoom đến 100%, 200%, 300%.
+- [ ] Trỏ vào một vùng board, Ctrl+Wheel phóng to mà điểm dưới
+      con trỏ không bị nhảy.
+- [ ] Note xa có thể nằm ngoài màn hình nhưng **không bị xóa hoặc
+      sửa tọa độ**; zoom ra/đổi vùng zoom để xem lại.
+- [ ] Không thể kéo note/ảnh/ghim vượt ra **ngoài board**.
+- [ ] Menu pin, red strings, text editor Ctrl+B, thao tác kéo
+      note và settings vẫn hoạt động, không có JS ERROR.
+- [ ] Logout/login: zoom/camera và vị trí note/ảnh khôi phục đúng.
