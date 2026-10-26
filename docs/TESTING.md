@@ -216,3 +216,15 @@ giấy, ảnh rồi thả, note dừng ngay. Click-kéo nhanh trên text vẫn t
 - RPM built in **Fedora container CI** is not equivalent to GNOME Shell
   Wayland desktop acceptance. See
   [PHASE_06](phases/PHASE_06.md) for release gates.
+
+## Hotfix: clicking blank text notes after creation/relogin
+
+The editable Clutter.Text must expand/fill the St.BoxLayout even when its
+buffer has zero glyphs. Paper click handler and a non-consuming Stage
+fallback restore focus in the editor's interior when the note is empty.
+They leave border drag/resize and nonempty text caret/selection intact.
+Unit tests cover empty vs nonempty/image, border exclusions, zoom 25–300%.
+
+Fedora GNOME Classic/Wayland: create an empty note, click elsewhere,
+later single-click the blank inner paper and type; log out/in and repeat.
+Also test double-click create, Ctrl+B, text selection and hold-to-move.

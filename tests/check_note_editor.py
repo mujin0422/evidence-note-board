@@ -22,3 +22,17 @@ assert "evidence-edit-title" not in css
 assert "background-color: #e9d898;" in css.lower()
 assert "const prefix=doc.text?title+'\\n':title" in rich
 print("Phase 2 body-only editor source checks: OK (not GNOME UI test)")
+
+# Regression for zero-length text: the editor must not collapse and must
+# refocus even when GNOME picks the board instead of the paper.
+for token in (
+    "x_expand: true,", "y_expand: true,",
+    "x_align: Clutter.ActorAlign.FILL",
+    "y_align: Clutter.ActorAlign.FILL",
+    "_focusEmptyTextAt(stageX,stageY)",
+    "this._focusEmptyTextAt(x,y)",
+    "isEmptyTextEditorHit(note,body.get_text(),x,y,",
+    "if (event.get_source()!==body)",
+):
+    assert token in code,token
+assert "isEmptyTextEditorHit" in (root/"extension/input/noteHitTest.js").read_text()

@@ -17,16 +17,20 @@ intentional validated `vX.Y.Z` tag.
 - [Phase 6 acceptance checklist](docs/phases/PHASE_06.md) — explicit
   distinction between CI, Fedora GNOME session and official Release.
 
-**Current Phase 6 is a Draft PR, not yet a public release.** Existing data
-under `~/.local/share/evidence-note-board` must never be deleted by
-installation or removal.
+**Stable release:** v0.2.0 is published on GitHub. A v0.2.1
+post-release hotfix is under review to restore input focus on empty notes.
+The new RPM is not an official release until its PR is tested and
+a separate v0.2.1 tag is intentionally published.
+
+User data under `~/.local/share/evidence-note-board` must never be
+deleted by installation or removal.
 
 ## Build locally
 
 ```bash
 git clone https://github.com/mujin0422/evidence-note-board.git
 cd evidence-note-board
-git switch feat/phase6-fedora-rpm-release
+git switch fix/post-release-empty-note-editor-focus
 bash scripts/build-rpm.sh
 bash scripts/check-built-rpm.sh dist
 (cd dist && sha256sum -c SHA256SUMS)

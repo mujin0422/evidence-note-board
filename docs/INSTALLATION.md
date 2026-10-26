@@ -1,4 +1,4 @@
-# INSTALLATION — Evidence Note Board v0.2.0
+# INSTALLATION — Evidence Note Board (Fedora 44)
 
 **Supported:** Fedora 44 + GNOME Shell 50.x + GNOME Classic on Wayland.
 This is a native GNOME extension plus a **user** systemd/D-Bus backend.
@@ -7,14 +7,14 @@ entry is needed. Never use sudo to run the app or edit the user database.
 
 ## 1. Download, verify and install the RPM
 
-After owner pushes a verified `v0.2.0` Git tag, visit
+After a verified stable GitHub Release is published, visit
 [GitHub Releases](https://github.com/mujin0422/evidence-note-board/releases).
 Download the `x86_64.rpm` and `SHA256SUMS` from the **same release**.
 
 ```bash
 cd ~/Downloads
 sha256sum -c SHA256SUMS  # requires all listed artifacts in this folder
-sudo dnf install ./evidence-note-board-0.2.0-*.x86_64.rpm
+sudo dnf install ./evidence-note-board-0.2.0-*.x86_64.rpm  # stable v0.2.0
 ```
 
 If you downloaded only the binary RPM, verify its one line using
@@ -116,3 +116,28 @@ check, **do not force-push the tag**. After the workflow-only fix merges
 to default branch `dev`, open **Actions → Fedora 44 Release → Run workflow**,
 select **dev** and enter existing tag `v0.2.0`. The build still uses
 the original v0.2.0 source tree.
+
+## v0.2.1 empty-note focus hotfix (testing, not yet published)
+
+For Fedora testers already using the system RPM, test the hotfix
+**without installing a parallel `~/.local` developer extension**:
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch --track origin/fix/post-release-empty-note-editor-focus
+bash scripts/build-rpm.sh
+bash scripts/check-built-rpm.sh dist
+(cd dist && sha256sum -c SHA256SUMS)
+sudo dnf upgrade ./dist/evidence-note-board-0.2.1-1.fc44.x86_64.rpm
+```
+
+Log out and log back into GNOME Classic Wayland. Confirm the RPM shows
+`0.2.1-1.fc44` and extension metadata version `19`. Create a note,
+leave it empty, click elsewhere, and then click its interior to type.
+Repeat after logout/login and verify the board, photos and pins persist.
+Test Ctrl+B, dragging a note, dragging the board and zooming.
+
+No database schema changes, and `dnf upgrade` preserves user data.
+Do not tag v0.2.1 or claim it is published until manual Fedora acceptance
+and all GitHub CI checks have completed successfully.

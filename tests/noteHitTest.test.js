@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isEmptyBoardPoint, insideRect} from '../extension/input/noteHitTest.js';
+import {isEmptyBoardPoint, insideRect,isEmptyTextEditorHit} from '../extension/input/noteHitTest.js';
 
 const note = {x: 300, y: 400, width: 270, height: 185};
 
@@ -33,4 +33,18 @@ test('rectangle edges count as occupied and invalid coords are rejected', () => 
     assert.equal(insideRect({x: 300, y: 400}, note), true);
     assert.equal(isEmptyBoardPoint(
         {zoom: 1, panX: 0, panY: 0}, {x: NaN, y: 400}, [note]), false);
+});
+
+test('saved empty notes remain focusable on the interior at every zoom',()=>{
+    const empty={type:'text',x:500,y:800,width:320,height:185,rotation:0};
+    for (const zoom of [0.25,0.5,1,2,3]) {
+        assert.equal(isEmptyTextEditorHit(empty,'',160,95,zoom),true);
+        assert.equal(isEmptyTextEditorHit(empty,'',2,90,zoom),false);
+        assert.equal(isEmptyTextEditorHit(empty,'',315,95,zoom),false);
+    }
+    assert.equal(isEmptyTextEditorHit(empty,' ',160,95,1),false);
+    assert.equal(isEmptyTextEditorHit(empty,'Đã nhập',160,95,1),false);
+    assert.equal(isEmptyTextEditorHit({...empty,type:'image'},'',160,95,1),false);
+    assert.equal(isEmptyTextEditorHit(empty,'',NaN,95,1),false);
+    assert.equal(isEmptyTextEditorHit(empty,'',340,95,1),false);
 });

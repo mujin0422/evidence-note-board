@@ -1,7 +1,7 @@
 %global uuid evidence-note-board@mujin0422.github.io
 
 Name:           evidence-note-board
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        Local-first evidence board for GNOME Shell
 
@@ -89,5 +89,8 @@ bash -n scripts/*.sh
 %{_datadir}/gnome-shell/extensions/%{uuid}/
 
 %changelog
+* Mon Oct 26 2026 mujin0422 - 0.2.1-1
+- Restore focus to empty notes and keep Clutter.Text's hit area allocated
+
 * Mon Oct 26 2026 mujin0422 - 0.2.0-1
 - Fedora 44 GNOME Shell 50 package, offline build and runtime dependencies
