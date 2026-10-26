@@ -11,7 +11,7 @@ assert "Gio.Subprocess.new(" in frontend
 assert "St.TextureCache.get_default()" in frontend
 assert "texture.load_file_async(" in frontend
 assert "Clutter.ContentGravity.RESIZE_ASPECT" in frontend
-assert "new St.Icon(" not in frontend
+assert "new St.Icon(" not in frontend[frontend.index("    _renderImageNote("):frontend.index("    _press(event)")]
 assert "new Gio.FileIcon" not in frontend
 assert "if (note.type === 'image')" in frontend
 assert "this._imagePicker?.force_exit();" in frontend

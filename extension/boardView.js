@@ -11,7 +11,9 @@ import {confineNote, maxZoomThatFits, validBoardPoint} from './boardBounds.js';
 import {NoteService} from './noteService.js';
 import {DoubleClickTracker} from './doubleClickTracker.js';
 import {isEmptyBoardPoint} from './noteHitTest.js';
-import {bodyTextForNote, hasLegacyTitle} from './noteContent.js';
+import {hasLegacyTitle} from './noteContent.js';
+import {richTextForNote,encodeRichText,toggleBoldSpans,rebaseBoldSpans,
+    byteOffsetForCharacter,characterLength} from './richText.js';
 import {PIN_SIZE, pinPosition} from './pinMath.js';
 import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
     from './stringMath.js';
@@ -104,12 +106,20 @@ export class BoardView {
         this._root.add_child(this._hud);
 
         // Double-click empty board for text; Ctrl+double-click for image.
+        // Full-sized symbolic vector icon, aligned with the HUD.
         this._settingsButton = new St.Button({
-            label: '⚙', reactive: true, can_focus: true,
-            style_class: 'evidence-create-button evidence-settings-button',
+            child: new St.Icon({
+                icon_name: 'preferences-system-symbolic',
+                icon_size: 22,
+                style_class: 'evidence-settings-icon',
+            }),
+            reactive: true, can_focus: true,
+            style_class: 'evidence-settings-button',
+            accessible_name: 'Cài đặt Evidence Board',
         });
         this._settingsButton.connect('clicked',()=>this._toggleSettingsMenu());
         this._root.add_child(this._settingsButton);
+        this._hud.connect('notify::width',()=>this._positionSettingsButton());
 
         this._resize();
         this._setStatus('Đang kết nối backend…');
@@ -234,6 +244,7 @@ export class BoardView {
     _applyPreferences() {
         if (this._hud)
             this._hud.visible = this._preferences.show_hud;
+        this._positionSettingsButton();
         this._queueStrings();
     }
 
@@ -298,8 +309,22 @@ export class BoardView {
             Math.max(0,Math.min(this._root.height-244,y+43)));
     }
 
+    _positionSettingsButton() {
+        if (!this._hud || !this._settingsButton || !this._root)
+            return;
+        // Use the HUD's current preferred width; never hardcode 242px.
+        // Clamp to stage bounds so Settings remains clickable at all times.
+        const [,natural]=this._hud.get_preferred_width(-1);
+        const buttonWidth=Math.max(40,this._settingsButton.width);
+        const edge=Math.max(8,this._root.width-buttonWidth-12);
+        const x=this._hud.visible ?
+            Math.min(edge,22+natural+8) : 22;
+        this._settingsButton.set_position(Math.max(8,x),55);
+    }
+
     _setStatus(message) {
         this._hud?.set_text(`EVIDENCE BOARD · ${message} · ${Math.round(this._view.zoom * 100)}%`);
+        this._positionSettingsButton();
     }
 
     _raiseAboveWallpaper() {
@@ -313,7 +338,7 @@ export class BoardView {
         // Single-screen mode: toolbar remains at fixed stage coordinates.
         const c=singleScreenLayout(global.stage.width,global.stage.height);
         this._hud?.set_position(c.hud.x,c.hud.y);
-        this._settingsButton?.set_position(c.settings.x,c.settings.y);
+        this._positionSettingsButton();
         this._closeSettingsMenu();
         if (this._stringsLayer) {
             this._stringsLayer.set_size(global.stage.width, global.stage.height);
@@ -558,6 +583,37 @@ export class BoardView {
             item.body.set_size(Math.max(120, note.width - 32),
                 Math.max(90, note.height - 85));
         }
+    }
+
+    _applyBoldAttributes(item) {
+        if (!item?.body)
+            return;
+        const list=new Pango.AttrList();
+        const text=item.body.get_text();
+        for (const [start,end] of item.boldSpans) {
+            const attribute=Pango.attr_weight_new(Pango.Weight.BOLD);
+            attribute.start_index=byteOffsetForCharacter(text,start);
+            attribute.end_index=byteOffsetForCharacter(text,end);
+            list.insert(attribute);
+        }
+        item.body.set_attributes(list);
+    }
+
+    _toggleBoldOnSelection(item) {
+        const body=item.body;
+        const text=body.get_text();
+        const length=characterLength(text);
+        const cursor=body.get_cursor_position();
+        const selection=body.get_selection_bound();
+        const a=cursor<0?length:cursor;
+        const b=selection<0?length:selection;
+        if (!body.get_selection() || a===b)
+            return; // No highlight: keep the text completely unchanged.
+        item.boldSpans=toggleBoldSpans(item.boldSpans,
+            Math.min(a,b),Math.max(a,b),length);
+        this._applyBoldAttributes(item);
+        this._syncTextHeight(item.note);
+        this._scheduleNote(item.note.id);
     }
 
     _syncTextHeight(note) {
@@ -1138,8 +1194,9 @@ export class BoardView {
         // Previously saved titles are shown as body text until migrated.
         const ink = new Cogl.Color();
         ink.init_from_4f(81 / 255, 72 / 255, 55 / 255, 1.0);
+        const rich=richTextForNote(note);
         const body = new Clutter.Text({
-            text: bodyTextForNote(note),
+            text: rich.text,
             reactive: true,
             editable: true,
             selectable: true,
@@ -1163,11 +1220,27 @@ export class BoardView {
         // Border gestures do not interfere with the multiline editor.
         this._connectPaperGestures(paper, note);
 
+        const item={note,actor:paper,body,
+            boldSpans:rich.bold,lastText:rich.text};
+        body.connect('key-press-event',(_actor,event)=>{
+            const key=event.get_key_symbol();
+            if ((event.get_state() & Clutter.ModifierType.CONTROL_MASK) &&
+                (key===Clutter.KEY_b || key===Clutter.KEY_B)) {
+                this._toggleBoldOnSelection(item);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
         body.connect('notify::text', () => {
+            const latest=body.get_text();
+            item.boldSpans=rebaseBoldSpans(item.lastText,latest,item.boldSpans);
+            item.lastText=latest;
+            this._applyBoldAttributes(item);
             this._syncTextHeight(note);
             this._scheduleNote(note.id);
         });
-        this._notes.set(note.id, {note, actor: paper, body});
+        this._notes.set(note.id, item);
+        this._applyBoldAttributes(item);
         this._world.add_child(paper);
         this._installPin(note);
         this._applyGeometry(note);
@@ -1213,14 +1286,15 @@ export class BoardView {
             return;
         if (!item.body) // Image notes contain no editable text.
             return;
-        const content = item.body.get_text();
+        const content=encodeRichText(item.body.get_text(),item.boldSpans);
         // Persist geometry alongside content, preserving edit ordering.
         this._service.updateGeometry(id, item.note.width, item.note.height, item.note.rotation)
             .catch(() => this._saveError());
         // Leave the existing DB schema and D-Bus signature intact while
         // using an empty legacy title for body-only notes.
         this._service.updateNote(id, '', content).then(()=>{
-            if (this._alive && item.body?.get_text()===content)
+            if (this._alive && item.body &&
+                encodeRichText(item.body.get_text(),item.boldSpans)===content)
                 this._dirtyNotes.delete(id);
         }).catch(()=>{
             this._dirtyNotes.add(id);

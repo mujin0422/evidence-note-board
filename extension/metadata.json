@@ -4,5 +4,5 @@
   "description": "Experimental charcoal board at the GNOME desktop background layer",
   "shell-version": ["50"],
   "url": "https://github.com/mujin0422/evidence-note-board",
-  "version": 13
+  "version": 14
 }

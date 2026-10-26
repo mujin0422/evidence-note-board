@@ -10,8 +10,8 @@ assert "new St.Entry(" not in code, "Removed title editor must not return"
 assert "item.title" not in code, "Saving cannot depend on a title field"
 assert "this._service.createNote('', ''," in code
 assert "this._service.updateNote(id, '', content)" in code
-assert "bodyTextForNote(note)" in code and "hasLegacyTitle(note)" in code
-assert "this._notes.set(note.id, {note, actor: paper, body})" in code
+assert "richTextForNote(note)" in code and "hasLegacyTitle(note)" in code
+assert "this._notes.set(note.id, item)" in code
 assert "cursor_visible: true" in code
 assert "single_line_mode: false" in code
 assert "activatable: false" in code
