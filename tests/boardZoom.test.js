@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {boardDimensions,clampBoardCamera,zoomBoardAt,worldToScreen,
     screenToWorld,MIN_ZOOM,MAX_ZOOM}
-    from '../extension/canvasMath.js';
+    from '../extension/geometry/canvasMath.js';
 import {confineNote,noteBounds}
-    from '../extension/boardBounds.js';
+    from '../extension/geometry/boardBounds.js';
 
 const screen={width:1920,height:1080};
 const board=boardDimensions(screen.width,screen.height);

@@ -12,10 +12,12 @@ export const CORNER_HIT = 24;
 export const PHOTO_H_MARGIN = 24;
 export const PHOTO_V_MARGIN = 48;
 
+// Restrict a scalar to an inclusive numeric interval.
 export function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
 
+// Resize text paper horizontally, compensating for camera zoom.
 export function resizedTextWidth(startWidth, deltaScreenX, zoom) {
     if (!Number.isFinite(zoom) || zoom <= 0)
         return startWidth;
@@ -41,6 +43,7 @@ export function resizedImage(startWidth, startHeight, deltaScreenX, zoom) {
     };
 }
 
+// Convert measured Pango text height into total paper height.
 export function requiredPaperHeight(textPixelHeight) {
     if (!Number.isFinite(textPixelHeight))
         return MIN_TEXT_HEIGHT;
@@ -48,10 +51,12 @@ export function requiredPaperHeight(textPixelHeight) {
         MIN_TEXT_HEIGHT, MAX_NOTE_HEIGHT);
 }
 
+// Normalize degrees into the [-180, 180) interval.
 export function normalizeAngle(degrees) {
     return ((degrees + 180) % 360 + 360) % 360 - 180;
 }
 
+// Return the shortest signed turn from one angle to another.
 export function angleDelta(from, to) {
     return normalizeAngle(to - from);
 }

@@ -14,7 +14,7 @@ UNIT = ROOT / "packaging/evidence-note-board.service"
 ENTRY = ROOT / "packaging/io.github.mujin0422.EvidenceNoteBoard.service.in"
 INSTALLER = (ROOT / "scripts/install-backend-dev.sh").read_text(encoding="utf-8")
 SETUP = (ROOT / "scripts/setup-dev.sh").read_text(encoding="utf-8")
-JS = (ROOT / "extension/boardView.js").read_text(encoding="utf-8")
+JS = (ROOT / "extension/ui/boardView.js").read_text(encoding="utf-8")
 
 def parse(path):
     config = configparser.ConfigParser(interpolation=None)

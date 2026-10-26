@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DoubleClickTracker} from '../extension/doubleClickTracker.js';
+import {DoubleClickTracker} from '../extension/input/doubleClickTracker.js';
 
 test('two close presses within timeout create one double-click', () => {
     const tracker = new DoubleClickTracker();

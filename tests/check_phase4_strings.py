@@ -1,8 +1,8 @@
 """Cross-layer D-Bus, draw and drag release regression (static, not compositor)."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-js=(root/"extension/boardView.js").read_text(encoding="utf-8")
-service=(root/"extension/noteService.js").read_text(encoding="utf-8")
+js=(root/"extension/ui/boardView.js").read_text(encoding="utf-8")
+service=(root/"extension/services/noteService.js").read_text(encoding="utf-8")
 backend=(root/"backend/src/db.rs").read_text(encoding="utf-8")
 dbus=(root/"backend/src/main.rs").read_text(encoding="utf-8")
 for method in ("ListConnections", "CreateConnection", "DeleteConnection"):
@@ -23,5 +23,5 @@ for snippet in (
 ):
     assert snippet in js, snippet
 assert "this._beginGrab()" not in js[js.index("    _startNoteDrag("):js.index("    _startPaperGesture(")]
-assert '"stringMath.js"' in (root/"scripts/build-extension.sh").read_text(encoding="utf-8")
+assert '"geometry/stringMath.js"' in (root/"scripts/build-extension.sh").read_text(encoding="utf-8")
 print("Red strings, capture-release and screen menu wiring: OK (static only)")

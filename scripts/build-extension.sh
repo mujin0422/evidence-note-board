@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Package the exact runtime files expected by GNOME Shell into dist/.
+# This script performs no installation and is safe to run in CI.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,9 +15,16 @@ import zipfile
 root = pathlib.Path(sys.argv[1])
 output = pathlib.Path(sys.argv[2]) / "evidence-note-board-gnome50-phase2.zip"
 source = root / "extension"
-files = ("metadata.json", "extension.js", "boardView.js",
-         "canvasMath.js", "noteService.js", "doubleClickTracker.js",
-         "noteHitTest.js", "noteContent.js", "geometry.js", "pinMath.js", "stringMath.js", "productionMath.js", "boardBounds.js", "richText.js", "holdDrag.js", "stylesheet.css")
+files = (
+    "metadata.json", "extension.js", "stylesheet.css",
+    "ui/boardView.js",
+    "services/noteService.js",
+    "input/doubleClickTracker.js", "input/holdDrag.js", "input/noteHitTest.js",
+    "model/noteContent.js", "model/richText.js",
+    "geometry/canvasMath.js", "geometry/boardBounds.js", "geometry/imageSizing.js",
+    "geometry/noteGeometry.js", "geometry/pinMath.js", "geometry/stringMath.js",
+    "core/runtimePolicy.js",
+)
 with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
     for name in files:
         archive.write(source / name, arcname=name)

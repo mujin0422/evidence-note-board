@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {clampZoom, panBy, screenToWorld, worldToScreen, zoomAt}
-    from '../extension/canvasMath.js';
+    from '../extension/geometry/canvasMath.js';
 
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
 

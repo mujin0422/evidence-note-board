@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {noteBounds,confineNote,maxZoomThatFits,validBoardPoint} from '../extension/boardBounds.js';
+import {noteBounds,confineNote,validBoardPoint} from '../extension/geometry/boardBounds.js';
 
 const photo = {id:'photo',type:'image',x:10,y:20,width:300,height:200,rotation:0};
 function within(note,width,height,zoom=1) {
@@ -36,11 +36,9 @@ test('paper height is bounded but text content untouched',()=>{
     within(next,1366,768);
     assert.equal(next.content,text.content);
 });
-test('quarter zoom allows movement inside the screen while zoom-in is capped',()=>{
+test('quarter zoom allows movement inside the screen',()=>{
     const moved=confineNote({...photo,x:4000,y:2600},1920,1080,.25);
     within(moved,1920,1080,.25);
-    const max=maxZoomThatFits([moved],1920,1080);
-    assert.ok(max>=.25&&max<=1);
 });
 test('safe clickable region rejects points beyond desktop',()=>{
     assert.ok(validBoardPoint({x:500,y:200},1920,1080));

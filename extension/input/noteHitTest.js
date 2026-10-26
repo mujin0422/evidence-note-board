@@ -1,4 +1,4 @@
-import {screenToWorld} from './canvasMath.js';
+import {screenToWorld} from '../geometry/canvasMath.js';
 
 // A rectangle contains a point, including its edges. The same geometry is
 // used for notes in world space and for toolbar zones in screen space.

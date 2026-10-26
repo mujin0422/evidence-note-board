@@ -62,20 +62,7 @@ export function confineNote(note, viewportWidth, viewportHeight, zoom = 1, margi
     return fixed;
 }
 
-export function maxZoomThatFits(notes, stageWidth, stageHeight, margin = 6) {
-    if (!(stageWidth > 0 && stageHeight > 0))
-        return 1;
-    let right = 0, bottom = 0;
-    for (const note of notes) {
-        const bound = noteBounds(note);
-        right = Math.max(right, bound.right);
-        bottom = Math.max(bottom, bound.bottom);
-    }
-    return Math.max(0.25, Math.min(3,
-        (stageWidth - margin) / Math.max(1, right),
-        (stageHeight - margin) / Math.max(1, bottom)));
-}
-
+// Validate a finite point inside the given board extent.
 export function validBoardPoint(point, stageWidth, stageHeight) {
     return Number.isFinite(point.x) && Number.isFinite(point.y) &&
         point.x >= 0 && point.y >= 0 &&

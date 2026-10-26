@@ -1,3 +1,4 @@
+# Template rendered at install time because D-Bus requires an absolute Exec.
 [D-BUS Service]
 Name=io.github.mujin0422.EvidenceNoteBoard
 Exec=@EXEC_PATH@

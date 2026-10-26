@@ -3,6 +3,7 @@
 export const TEXT_HOLD_MS = 330;
 export const TEXT_SLOP_PX = 7;
 
+// Keep a pending text hold alive only while the pointer stays nearly still.
 export function keepTextHold(start, current, leftButtonDown) {
     if (!leftButtonDown || !start || !current)
         return false;

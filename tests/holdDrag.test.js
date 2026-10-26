@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {TEXT_HOLD_MS,TEXT_SLOP_PX,keepTextHold} from '../extension/holdDrag.js';
+import {TEXT_HOLD_MS,TEXT_SLOP_PX,keepTextHold} from '../extension/input/holdDrag.js';
 
 test('held left mouse with little movement keeps pending paper drag',()=>{
     assert.equal(TEXT_HOLD_MS,330);

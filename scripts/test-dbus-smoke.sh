@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Exercise the real Rust service over a disposable session bus and data root.
 set -euo pipefail
 
 # Run only inside dbus-run-session. This is service/DB integration, not a
@@ -25,7 +26,10 @@ start() {
     PID=$!
     local ready=0
     for _ in $(seq 1 40); do
-        if busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" ListNotes >/dev/null 2>&1; then
+        # Do not let an already-installed activation entry win the race and
+        # accidentally connect this test to the user's real service/database.
+        if busctl --user --auto-start=no call \
+            "$SERVICE" "$OBJECT" "$SERVICE" ListNotes >/dev/null 2>&1; then
             ready=1
             break
         fi

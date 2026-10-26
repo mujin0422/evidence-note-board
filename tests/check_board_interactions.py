@@ -1,9 +1,9 @@
 """Static source contract, not a GNOME Classic/Wayland pointer test."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-source=(root/"extension/boardView.js").read_text(encoding="utf-8")
-tracker=(root/"extension/doubleClickTracker.js").read_text(encoding="utf-8")
-bounds=(root/"extension/boardBounds.js").read_text(encoding="utf-8")
+source=(root/"extension/ui/boardView.js").read_text(encoding="utf-8")
+tracker=(root/"extension/input/doubleClickTracker.js").read_text(encoding="utf-8")
+bounds=(root/"extension/geometry/boardBounds.js").read_text(encoding="utf-8")
 
 assert "_chooseImage({x,y})" in source
 assert "_createNoteAtScreen(x,y)" in source
@@ -20,7 +20,7 @@ assert "this._boardSize=boardDimensions(" in source
 assert "confineNote(note,this._boardSize.width,this._boardSize.height,1)" in source
 assert "event.get_button()!==1" in source
 assert "BUTTON2_MASK" not in source
-assert "_confineGeometry(note" in source and "_confineAllNotes(" in source
+assert "_confineGeometry(note" in source
 assert "maxZoomThatFits(" not in source and "confineNote(" in source
 assert "noteBounds(" in bounds and "pinPosition(" in bounds
 assert "action('Zoom 100%'" not in source

@@ -20,6 +20,7 @@ import uuid
 
 
 def data_root():
+    """Return the absolute XDG directory containing live board data."""
     base = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share")))
     if not base.is_absolute():
         raise ValueError("XDG_DATA_HOME must be absolute")
@@ -27,12 +28,14 @@ def data_root():
 
 
 def safe_asset(name):
+    """Accept only a plain backend-generated filename, never a path."""
     if not isinstance(name, str) or not name or Path(name).name != name or "/" in name or "\\" in name:
         raise ValueError("Unsafe asset name in database")
     return name
 
 
 def sha256(path):
+    """Hash a file incrementally so large assets are not duplicated in memory."""
     h = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -41,6 +44,7 @@ def sha256(path):
 
 
 def verify(folder):
+    """Verify SQLite integrity and every asset referenced by a snapshot."""
     database = folder / "evidence.db"
     if not database.is_file():
         raise ValueError(f"Missing evidence.db in {folder}")
@@ -61,6 +65,7 @@ def verify(folder):
 
 
 def make_backup(root, output=None):
+    """Create and verify a consistent SQLite/asset snapshot."""
     original = root / "evidence.db"
     if not original.is_file():
         raise ValueError(f"Database not found: {original}")
@@ -93,6 +98,7 @@ def make_backup(root, output=None):
 
 
 def service_running():
+    """Return whether the user backend is active, if systemd is available."""
     if shutil.which("systemctl") is None:
         return False
     result = subprocess.run(
@@ -102,6 +108,7 @@ def service_running():
 
 
 def restore(root, source):
+    """Replace live data while keeping the previous state as a rollback."""
     if service_running():
         raise ValueError("Stop evidence-note-board.service AND disable the GNOME extension before restore")
     stats = verify(source)
@@ -132,6 +139,7 @@ def restore(root, source):
 
 
 def main():
+    """Parse the command line and dispatch backup, verify or restore."""
     parser = argparse.ArgumentParser(description="Evidence Board local SQLite/asset recovery")
     actions = parser.add_subparsers(dest="action", required=True)
     backup = actions.add_parser("backup")

@@ -11,9 +11,16 @@ assert meta["uuid"] == "evidence-note-board@mujin0422.github.io"
 assert meta["shell-version"] == ["50"]
 assert "#111111" in (ext / "stylesheet.css").read_text(encoding="utf-8")
 
-required = {"metadata.json", "extension.js", "boardView.js",
-            "canvasMath.js", "noteService.js", "doubleClickTracker.js",
-            "noteHitTest.js", "noteContent.js", "geometry.js", "pinMath.js", "stringMath.js", "productionMath.js", "boardBounds.js", "richText.js", "holdDrag.js", "stylesheet.css"}
+required = {
+    "metadata.json", "extension.js", "stylesheet.css",
+    "ui/boardView.js",
+    "services/noteService.js",
+    "input/doubleClickTracker.js", "input/holdDrag.js", "input/noteHitTest.js",
+    "model/noteContent.js", "model/richText.js",
+    "geometry/canvasMath.js", "geometry/boardBounds.js", "geometry/imageSizing.js",
+    "geometry/noteGeometry.js", "geometry/pinMath.js", "geometry/stringMath.js",
+    "core/runtimePolicy.js",
+}
 assert all((ext / path).is_file() for path in required)
 zip_path = ROOT / "dist/evidence-note-board-gnome50-phase2.zip"
 if zip_path.exists():

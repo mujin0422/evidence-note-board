@@ -1,3 +1,9 @@
+//! Evidence Note Board backend process.
+//!
+//! The service exposes a narrow session D-Bus API and keeps all SQLite and
+//! filesystem work outside GNOME Shell. It owns one database connection for
+//! the lifetime of the user session.
+
 mod assets;
 mod db;
 mod settings;
@@ -8,12 +14,14 @@ use zbus::{connection, interface};
 const SERVICE: &str = "io.github.mujin0422.EvidenceNoteBoard";
 const OBJECT: &str = "/io/github/mujin0422/EvidenceNoteBoard";
 
+/// D-Bus object containing synchronized access to storage and preferences.
 struct NoteApi {
     storage: Mutex<db::Storage>,
     preferences: Mutex<settings::SettingsStore>,
 }
 
 impl NoteApi {
+    /// Lock storage, execute one operation and hide internal errors from IPC.
     fn with_db<T>(
         &self,
         f: impl FnOnce(&mut db::Storage) -> rusqlite::Result<T>,
@@ -25,6 +33,7 @@ impl NoteApi {
     }
 }
 
+/// Enforce payload limits before text reaches SQLite.
 fn validate_text(title: &str, content: &str) -> zbus::fdo::Result<()> {
     if title.len() > 512 || content.len() > 65536 {
         return Err(zbus::fdo::Error::InvalidArgs("Note exceeds size limit".into()));
@@ -32,6 +41,7 @@ fn validate_text(title: &str, content: &str) -> zbus::fdo::Result<()> {
     Ok(())
 }
 
+/// Accept only finite world coordinates within the supported canvas range.
 fn validate_position(x: f64, y: f64) -> zbus::fdo::Result<()> {
     if !x.is_finite() || !y.is_finite() || x.abs() > 1_000_000.0 || y.abs() > 1_000_000.0 {
         return Err(zbus::fdo::Error::InvalidArgs("Invalid canvas position".into()));
@@ -39,6 +49,7 @@ fn validate_position(x: f64, y: f64) -> zbus::fdo::Result<()> {
     Ok(())
 }
 
+/// Validate persisted paper dimensions and rotation.
 fn validate_geometry(width: f64, height: f64, rotation: f64) -> zbus::fdo::Result<()> {
     if !width.is_finite() || !height.is_finite() || !rotation.is_finite() ||
         !(180.0..=1200.0).contains(&width) ||
@@ -49,6 +60,7 @@ fn validate_geometry(width: f64, height: f64, rotation: f64) -> zbus::fdo::Resul
     Ok(())
 }
 
+/// Validate camera zoom and pan as one coherent state.
 fn validate_view(zoom: f64, x: f64, y: f64) -> zbus::fdo::Result<()> {
     validate_position(x, y)?;
     if !zoom.is_finite() || !(0.25..=3.0).contains(&zoom) {
@@ -59,12 +71,14 @@ fn validate_view(zoom: f64, x: f64, y: f64) -> zbus::fdo::Result<()> {
 
 #[interface(name = "io.github.mujin0422.EvidenceNoteBoard", spawn = false)]
 impl NoteApi {
+    /// Serialize every saved note for initial UI hydration.
     fn list_notes(&self) -> zbus::fdo::Result<String> {
         let notes = self.with_db(|db| db.list_notes())?;
         serde_json::to_string(&notes)
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Create a text note after validating its content and position.
     fn create_note(&self, title: &str, content: &str, x: f64, y: f64) -> zbus::fdo::Result<String> {
         validate_text(title, content)?;
         validate_position(x, y)?;
@@ -73,6 +87,7 @@ impl NoteApi {
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Import a user-selected image from an absolute local path.
     fn import_image(&self, path: &str, x: f64, y: f64) -> zbus::fdo::Result<String> {
         validate_position(x, y)?;
         if path.len() > 4096 || !PathBuf::from(path).is_absolute() {
@@ -83,6 +98,7 @@ impl NoteApi {
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Save text content for an existing text note.
     fn update_note(&self, id: &str, title: &str, content: &str) -> zbus::fdo::Result<()> {
         validate_text(title, content)?;
         if !self.with_db(|db| db.update_note(id, title, content))? {
@@ -91,6 +107,7 @@ impl NoteApi {
         Ok(())
     }
 
+    /// Save a note's world-space position.
     fn move_note(&self, id: &str, x: f64, y: f64) -> zbus::fdo::Result<()> {
         validate_position(x, y)?;
         if !self.with_db(|db| db.move_note(id, x, y))? {
@@ -99,6 +116,7 @@ impl NoteApi {
         Ok(())
     }
 
+    /// Save paper size and rotation after a resize/rotate gesture.
     fn update_geometry(&self, id: &str, width: f64, height: f64, rotation: f64)
         -> zbus::fdo::Result<()> {
         validate_geometry(width, height, rotation)?;
@@ -108,12 +126,14 @@ impl NoteApi {
         Ok(())
     }
 
+    /// Serialize all saved red-string connections.
     fn list_connections(&self) -> zbus::fdo::Result<String> {
         let edges = self.with_db(|db| db.list_connections())?;
         serde_json::to_string(&edges)
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Connect two different note pins, reusing an existing unordered edge.
     fn create_connection(&self, source_note_id: &str, target_note_id: &str)
         -> zbus::fdo::Result<String> {
         if source_note_id == target_note_id ||
@@ -126,6 +146,7 @@ impl NoteApi {
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Delete one red-string connection.
     fn delete_connection(&self, id: &str) -> zbus::fdo::Result<()> {
         if !self.with_db(|db| db.delete_connection(id))? {
             return Err(zbus::fdo::Error::Failed("Connection not found".into()));
@@ -133,6 +154,7 @@ impl NoteApi {
         Ok(())
     }
 
+    /// Delete a note; related pins/edges cascade inside SQLite.
     fn delete_note(&self, id: &str) -> zbus::fdo::Result<()> {
         if !self.with_db(|db| db.delete_note(id))? {
             return Err(zbus::fdo::Error::Failed("Note not found".into()));
@@ -140,6 +162,7 @@ impl NoteApi {
         Ok(())
     }
 
+    /// Serialize the current UI preferences.
     fn get_settings(&self) -> zbus::fdo::Result<String> {
         let settings = self.preferences.lock()
             .map_err(|_| zbus::fdo::Error::Failed("Settings unavailable".into()))?;
@@ -147,6 +170,7 @@ impl NoteApi {
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Validate and atomically persist UI preferences.
     fn save_settings(&self, show_hud: bool, show_strings: bool, zoom_step: f64)
         -> zbus::fdo::Result<()> {
         let next = settings::Settings {show_hud, show_strings, zoom_step};
@@ -156,18 +180,21 @@ impl NoteApi {
             .save(next).map_err(|_| zbus::fdo::Error::Failed("Cannot save preferences".into()))
     }
 
+    /// Serialize the saved board camera.
     fn get_view(&self) -> zbus::fdo::Result<String> {
         let view = self.with_db(|db| db.load_view())?;
         serde_json::to_string(&view)
             .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
     }
 
+    /// Validate and persist the board camera.
     fn save_view(&self, zoom: f64, pan_x: f64, pan_y: f64) -> zbus::fdo::Result<()> {
         validate_view(zoom, pan_x, pan_y)?;
         self.with_db(|db| db.save_view(zoom, pan_x, pan_y))
     }
 }
 
+/// Resolve and create the XDG data directory containing `evidence.db`.
 fn data_file() -> Result<PathBuf, Box<dyn Error>> {
     let base = match std::env::var_os("XDG_DATA_HOME") {
         Some(p) if !p.is_empty() => PathBuf::from(p),
@@ -184,7 +211,8 @@ fn data_file() -> Result<PathBuf, Box<dyn Error>> {
     Ok(dir.join("evidence.db"))
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
+/// Start the session-bus service and keep it alive until systemd stops it.
 async fn main() -> Result<(), Box<dyn Error>> {
     let storage = db::Storage::open(&data_file()?)?;
     let settings_path = settings::SettingsStore::default_path()?;

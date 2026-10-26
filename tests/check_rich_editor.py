@@ -1,9 +1,9 @@
 """Static contracts, not GNOME compositor tests."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-js=(root/"extension/boardView.js").read_text(encoding="utf-8")
+js=(root/"extension/ui/boardView.js").read_text(encoding="utf-8")
 styles=(root/"extension/stylesheet.css").read_text(encoding="utf-8")
-rich=(root/"extension/richText.js").read_text(encoding="utf-8")
+rich=(root/"extension/model/richText.js").read_text(encoding="utf-8")
 assert "icon_name: 'preferences-system-symbolic'" in js
 assert "icon_size: 22" in js
 assert "_positionSettingsButton()" in js
@@ -24,6 +24,6 @@ for value in (
 ):
     assert value in js,value
 assert "ENB_RICH_TEXT_V1" in rich
-assert "richText.js" in (root/"scripts/install-dev.sh").read_text(encoding="utf-8")
-assert '"richText.js"' in (root/"scripts/build-extension.sh").read_text(encoding="utf-8")
+assert "model/richText.js" in (root/"scripts/install-dev.sh").read_text(encoding="utf-8")
+assert '"model/richText.js"' in (root/"scripts/build-extension.sh").read_text(encoding="utf-8")
 print("HUD settings icon / Ctrl+B rich-text static contracts: PASS (GNOME untested)")

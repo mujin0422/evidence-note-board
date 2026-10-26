@@ -1,9 +1,10 @@
-// Phase 5 single-screen layout and lightweight rendering/recovery math.
+// Runtime defaults, single-screen layout and lightweight recovery policy.
 // The board deliberately does not implement multi-monitor positioning.
 export const DEFAULT_PREFERENCES = Object.freeze({
     show_hud: true, show_strings: true, zoom_step: 1.1,
 });
 
+// Derive fixed single-display toolbar anchors and the viewport center.
 export function singleScreenLayout(stageWidth, stageHeight) {
     // Stage coordinates start at (0,0). This is the supported single-
     // display mode; never consult GNOME's primaryIndex or monitor list.
@@ -18,6 +19,7 @@ export function singleScreenLayout(stageWidth, stageHeight) {
     };
 }
 
+// Cheaply reject curves whose endpoints are both outside an expanded viewport.
 export function curveVisible(a,b,viewport,margin=85) {
     if (!a || !b || !viewport ||
         ![a.x,a.y,b.x,b.y,viewport.width,viewport.height].every(Number.isFinite))
@@ -28,6 +30,7 @@ export function curveVisible(a,b,viewport,margin=85) {
         Math.min(a.y,b.y)-margin <= viewport.height;
 }
 
+// Exponential reconnect backoff capped at 15 seconds.
 export function reconnectDelay(attempt) {
     return Math.min(15000,600*2**Math.min(Math.max(0,attempt),5));
 }

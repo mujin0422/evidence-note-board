@@ -1,7 +1,8 @@
 // CPU-only synthetic geometry benchmark, NOT a GNOME frame-time/FPS claim.
+// It estimates how pure curve math scales without loading GJS or the compositor.
 import {performance} from 'node:perf_hooks';
-import {curveVisible} from '../extension/productionMath.js';
-import {pinCenter} from '../extension/stringMath.js';
+import {curveVisible} from '../extension/core/runtimePolicy.js';
+import {pinCenter} from '../extension/geometry/stringMath.js';
 const view={width:1920,height:1080};
 for (const count of [10,100,500]) {
     const notes=Array.from({length:count},(_,id)=>({

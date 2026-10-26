@@ -8,6 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
+/// User-visible preferences shared with the extension over D-Bus.
 pub struct Settings {
     pub show_hud: bool,
     pub show_strings: bool,
@@ -21,6 +22,7 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Reject non-finite or impractical zoom increments before persistence.
     pub fn validate(&self) -> Result<(), String> {
         if !self.zoom_step.is_finite() || !(1.02..=1.5).contains(&self.zoom_step) {
             return Err("zoom_step must be between 1.02 and 1.5".into());
@@ -29,12 +31,14 @@ impl Settings {
     }
 }
 
+/// Loads and atomically saves the local JSON preferences file.
 pub struct SettingsStore {
     path: PathBuf,
     settings: Settings,
 }
 
 impl SettingsStore {
+    /// Resolve the settings path according to the XDG base-directory rules.
     pub fn default_path() -> Result<PathBuf, String> {
         let dir = match std::env::var_os("XDG_CONFIG_HOME") {
             Some(dir) if !dir.is_empty() => PathBuf::from(dir),
@@ -45,6 +49,7 @@ impl SettingsStore {
         Ok(dir.join("evidence-note-board").join("settings.json"))
     }
 
+    /// Load valid settings, falling back safely while preserving bad input.
     pub fn open(path: PathBuf) -> Self {
         let settings = match fs::read(&path) {
             Ok(data) => match serde_json::from_slice::<Settings>(&data) {
@@ -63,8 +68,10 @@ impl SettingsStore {
         Self {path, settings}
     }
 
+    /// Return an owned snapshot so callers cannot mutate the store in place.
     pub fn get(&self) -> Settings { self.settings.clone() }
 
+    /// Validate and atomically replace the JSON settings file.
     pub fn save(&mut self, requested: Settings) -> Result<(), String> {
         requested.validate()?;
         let dir = self.path.parent().ok_or("Invalid settings path")?;

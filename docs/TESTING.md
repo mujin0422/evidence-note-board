@@ -188,7 +188,7 @@ giấy, ảnh rồi thả, note dừng ngay. Click-kéo nhanh trên text vẫn t
   cap 25–300% và clamp viewport **chỉ ở mép board**, không dựa vào
   bounding box note trên màn hình.
 - `tests/check_board_interactions.py` xác minh nguồn JS không
-  còn `maxZoomThatFits` trong zoom, vẫn hỗ trợ ảnh Ctrl+double-click
+  không còn ép zoom theo note xa nhất, vẫn hỗ trợ ảnh Ctrl+double-click
   và kéo note.
 - GNOME Wayland: bắt buộc nghiệm thu camera khi scroll, text editor,
   pin menu, dây đỏ và persistence thực tế.

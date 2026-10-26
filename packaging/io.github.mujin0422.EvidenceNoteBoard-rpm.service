@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.mujin0422.EvidenceNoteBoard
+Exec=/usr/bin/evidence-note-boardd
+SystemdService=evidence-note-board.service

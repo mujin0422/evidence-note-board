@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pinPosition} from '../extension/pinMath.js';
+import {pinPosition} from '../extension/geometry/pinMath.js';
 
 test('pin is centered on the top of a note or photo', () => {
     assert.deepEqual(pinPosition({x: 100, y: 200, width: 270, height: 185, rotation: 0}),

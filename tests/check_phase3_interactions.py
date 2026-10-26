@@ -5,9 +5,9 @@ CI cannot prove GNOME compositor hit-testing: verify on Fedora Wayland.
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-js = (root / "extension/boardView.js").read_text(encoding="utf-8")
-helper = (root / "extension/geometry.js").read_text(encoding="utf-8")
-service = (root / "extension/noteService.js").read_text(encoding="utf-8")
+js = (root / "extension/ui/boardView.js").read_text(encoding="utf-8")
+helper = (root / "extension/geometry/noteGeometry.js").read_text(encoding="utf-8")
+service = (root / "extension/services/noteService.js").read_text(encoding="utf-8")
 db = (root / "backend/src/db.rs").read_text(encoding="utf-8")
 dbus = (root / "backend/src/main.rs").read_text(encoding="utf-8")
 installer = (root / "scripts/install-dev.sh").read_text(encoding="utf-8")

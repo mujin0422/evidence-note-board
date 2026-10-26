@@ -15,21 +15,22 @@ jobs:
       - name: Syntax
         run: |
           node --check extension/extension.js
-          node --check extension/boardView.js
-          node --check extension/canvasMath.js
-          node --check extension/noteService.js
-          node --check extension/doubleClickTracker.js
-          node --check extension/noteHitTest.js
-          node --check extension/noteContent.js
-          node --check extension/geometry.js
-          node --check extension/pinMath.js
-          node --check extension/stringMath.js
-          node --check extension/productionMath.js
-          node --check extension/boardBounds.js
-          node --check extension/richText.js
-          node --check extension/holdDrag.js
+          node --check extension/ui/boardView.js
+          node --check extension/services/noteService.js
+          node --check extension/input/doubleClickTracker.js
+          node --check extension/input/noteHitTest.js
+          node --check extension/input/holdDrag.js
+          node --check extension/model/noteContent.js
+          node --check extension/model/richText.js
+          node --check extension/geometry/canvasMath.js
+          node --check extension/geometry/imageSizing.js
+          node --check extension/geometry/noteGeometry.js
+          node --check extension/geometry/pinMath.js
+          node --check extension/geometry/stringMath.js
+          node --check extension/geometry/boardBounds.js
+          node --check extension/core/runtimePolicy.js
       - name: Camera tests
-        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/geometry.test.js tests/pinMath.test.js tests/stringMath.test.js tests/productionMath.test.js tests/boardBounds.test.js tests/richText.test.js tests/holdDrag.test.js tests/boardZoom.test.js tests/boardPan.test.js
+        run: node --test tests/canvasMath.test.js tests/doubleClickTracker.test.js tests/noteHitTest.test.js tests/noteContent.test.js tests/imageSizing.test.js tests/noteGeometry.test.js tests/pinMath.test.js tests/stringMath.test.js tests/runtimePolicy.test.js tests/boardBounds.test.js tests/richText.test.js tests/holdDrag.test.js tests/boardZoom.test.js tests/boardPan.test.js
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py
@@ -47,6 +48,8 @@ jobs:
           python3 tests/check_board_pan.py
           python3 tests/check_rich_editor.py
           python3 tests/check_compact_hud_drag.py
+          python3 tests/check_rpm_packaging.py
+          python3 tests/check_resource_efficiency.py
           python3 -m unittest discover -s tests -p 'test_backup.py'
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh scripts/setup-dev.sh
           node scripts/benchmark-geometry.mjs

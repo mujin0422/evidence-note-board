@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS assets (
     checksum TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_assets_note ON assets(note_id);
+CREATE INDEX IF NOT EXISTS idx_assets_checksum ON assets(checksum);
 
 CREATE TABLE IF NOT EXISTS pins (
     id TEXT PRIMARY KEY,

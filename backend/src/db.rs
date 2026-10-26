@@ -1,13 +1,19 @@
-use rusqlite::{params, Connection, Error, OptionalExtension, Result, Row};
-use std::{fs, io::Write, path::PathBuf};
+//! SQLite persistence for the single local evidence board.
+//!
+//! This module owns migrations, note/asset CRUD, camera state and red-string
+//! edges. Callers validate IPC input; this layer maintains database and file
+//! consistency with transactions, foreign keys and best-effort cleanup.
+
 use crate::assets;
+use rusqlite::{params, Connection, Error, OptionalExtension, Result, Row};
 use serde::Serialize;
-use std::path::Path;
+use std::{fs, io::Write, path::{Path, PathBuf}};
 use uuid::Uuid;
 
 const SCHEMA: &str = include_str!("../../db/migrations/0001_init.sql");
 const BOARD_ID: &str = "default";
 
+/// Serializable note DTO returned to the GNOME extension.
 #[derive(Debug, Clone, Serialize)]
 pub struct Note {
     pub id: String,
@@ -26,6 +32,7 @@ pub struct Note {
     pub z_index: i64,
 }
 
+/// Serializable red-string edge expressed using note IDs.
 #[derive(Debug, Clone, Serialize)]
 pub struct ConnectionEdge {
     pub id: String,
@@ -34,6 +41,7 @@ pub struct ConnectionEdge {
     pub color: String,
 }
 
+/// Persisted board camera state.
 #[derive(Debug, Clone, Serialize)]
 pub struct View {
     pub zoom: f64,
@@ -41,12 +49,14 @@ pub struct View {
     pub pan_y: f64,
 }
 
+/// Owns the SQLite connection and the adjacent managed-asset directory.
 pub struct Storage {
     conn: Connection,
     assets_dir: PathBuf,
 }
 
 impl Storage {
+    /// Open a database file and bring it to the schema expected by this build.
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
         let assets_dir = path.parent().ok_or(Error::InvalidPath(path.to_path_buf()))?
@@ -54,6 +64,7 @@ impl Storage {
         Self::initialize(conn, assets_dir)
     }
 
+    /// Configure SQLite, apply the initial migration and backfill stable pins.
     fn initialize(mut conn: Connection, assets_dir: PathBuf) -> Result<Self> {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.pragma_update(None, "busy_timeout", 3000)?;
@@ -79,6 +90,12 @@ impl Storage {
             "INSERT OR IGNORE INTO board_view_state (board_id) VALUES (?1)",
             [BOARD_ID],
         )?;
+        // An index is safe to add to existing schema-v1 databases and keeps
+        // duplicate-image lookup cheap without a destructive migration.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_assets_checksum ON assets(checksum)",
+            [],
+        )?;
         // Backfill Phase-4 pins for every existing Phase-2/3 note without
         // changing schema/user_version or destroying existing pins/strings.
         conn.execute(
@@ -91,6 +108,7 @@ impl Storage {
         Ok(Self { conn, assets_dir })
     }
 
+    /// Convert one joined SQL row into the API-facing note representation.
     fn map_note(row: &Row<'_>, assets_dir: &Path) -> Result<Note> {
         let asset_name: Option<String> = row.get(11)?;
         let asset_path = asset_name.map(|name| assets_dir.join(name).to_string_lossy().into_owned());
@@ -111,6 +129,7 @@ impl Storage {
         })
     }
 
+    /// Return all notes in deterministic visual stacking order.
     pub fn list_notes(&self) -> Result<Vec<Note>> {
         let mut stmt = self.conn.prepare(
             "SELECT n.id, n.type, COALESCE(n.title, ''), n.content, n.x, n.y,
@@ -126,6 +145,7 @@ impl Storage {
         notes
     }
 
+    /// Insert a text note and its default top-center pin.
     pub fn create_note(&self, title: &str, content: &str, x: f64, y: f64) -> Result<Note> {
         let id = Uuid::new_v4().to_string();
         self.conn.execute(
@@ -142,6 +162,7 @@ impl Storage {
         self.get_note(&id)?.ok_or(Error::QueryReturnedNoRows)
     }
 
+    /// Fetch one note scoped to the default board.
     fn get_note(&self, id: &str) -> Result<Option<Note>> {
         self.conn.query_row(
             "SELECT n.id, n.type, COALESCE(n.title, ''), n.content, n.x, n.y,
@@ -155,6 +176,7 @@ impl Storage {
         ).optional()
     }
 
+    /// Validate and copy an image, then atomically register its note metadata.
     pub fn import_image(&mut self, path: &Path, x: f64, y: f64) -> Result<Note> {
         let data = assets::validate_file(path)
             .map_err(|error| Error::ToSqlConversionFailure(error))?;
@@ -164,14 +186,22 @@ impl Storage {
         let id = Uuid::new_v4().to_string();
         let file_name = format!("{}.{}", id, data.ext);
         let destination = self.assets_dir.join(&file_name);
-        let mut output = fs::OpenOptions::new().create_new(true).write(true)
-            .open(&destination)
-            .map_err(|error| Error::ToSqlConversionFailure(Box::new(error)))?;
-        if let Err(error) = output.write_all(&data.bytes) {
-            let _ = fs::remove_file(&destination);
-            return Err(Error::ToSqlConversionFailure(Box::new(error)));
+        let duplicate: Option<String> = self.conn.query_row(
+            "SELECT file_path FROM assets WHERE checksum=?1 LIMIT 1",
+            [&data.checksum], |row| row.get(0),
+        ).optional()?;
+        let linked = duplicate.as_deref().is_some_and(|existing|
+            fs::hard_link(self.assets_dir.join(existing), &destination).is_ok());
+        if !linked {
+            let mut output = fs::OpenOptions::new().create_new(true).write(true)
+                .open(&destination)
+                .map_err(|error| Error::ToSqlConversionFailure(Box::new(error)))?;
+            if let Err(error) = output.write_all(&data.bytes) {
+                let _ = fs::remove_file(&destination);
+                return Err(Error::ToSqlConversionFailure(Box::new(error)));
+            }
+            drop(output);
         }
-        drop(output);
 
         // Limit initial visual footprint while preserving original ratio.
         let factor = (320.0 / f64::from(data.width))
@@ -210,6 +240,7 @@ impl Storage {
         self.get_note(&id)?.ok_or(Error::QueryReturnedNoRows)
     }
 
+    /// Update editable text fields; image cards intentionally reject this path.
     pub fn update_note(&self, id: &str, title: &str, content: &str) -> Result<bool> {
         Ok(self.conn.execute(
             "UPDATE notes SET title = ?1, content = ?2, updated_at = unixepoch()
@@ -218,6 +249,7 @@ impl Storage {
         )? == 1)
     }
 
+    /// Persist the world-space position of either note type.
     pub fn move_note(&self, id: &str, x: f64, y: f64) -> Result<bool> {
         Ok(self.conn.execute(
             "UPDATE notes SET x = ?1, y = ?2, updated_at = unixepoch()
@@ -291,6 +323,7 @@ impl Storage {
         })
     }
 
+    /// Remove a red-string edge owned by the current board.
     pub fn delete_connection(&self, id: &str) -> Result<bool> {
         Ok(self.conn.execute(
             "DELETE FROM connections WHERE id=?1 AND EXISTS (
@@ -300,6 +333,7 @@ impl Storage {
         )? == 1)
     }
 
+    /// Delete a note and remove its managed asset after the DB row is gone.
     pub fn delete_note(&self, id: &str) -> Result<bool> {
         let asset: Option<String> = self.conn.query_row(
             "SELECT a.file_path FROM assets a JOIN notes n ON n.id=a.note_id
@@ -323,6 +357,7 @@ impl Storage {
         Ok(removed)
     }
 
+    /// Load the one camera row created during initialization.
     pub fn load_view(&self) -> Result<View> {
         self.conn.query_row(
             "SELECT zoom, pan_x, pan_y FROM board_view_state WHERE board_id = ?1",
@@ -335,6 +370,7 @@ impl Storage {
         )
     }
 
+    /// Persist zoom and pan without changing any note coordinates.
     pub fn save_view(&self, zoom: f64, pan_x: f64, pan_y: f64) -> Result<()> {
         self.conn.execute(
             "UPDATE board_view_state SET zoom = ?1, pan_x = ?2, pan_y = ?3 WHERE board_id = ?4",
@@ -424,6 +460,31 @@ mod tests {
         assert!(db.delete_note(&saved.id).unwrap());
         assert!(!Path::new(&stored).exists());
         assert!(db.list_notes().unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repeated_imports_share_disk_blocks_and_delete_independently() {
+        use std::os::unix::fs::MetadataExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("same.png");
+        image::RgbImage::new(80, 60)
+            .save_with_format(&source, image::ImageFormat::Png).unwrap();
+        let mut db = Storage::open(&temp.path().join("board.db")).unwrap();
+        let first = db.import_image(&source, 0.0, 0.0).unwrap();
+        let second = db.import_image(&source, 100.0, 100.0).unwrap();
+        let first_path = PathBuf::from(first.asset_path.unwrap());
+        let second_path = PathBuf::from(second.asset_path.unwrap());
+
+        assert_ne!(first_path, second_path);
+        assert_eq!(fs::metadata(&first_path).unwrap().ino(),
+            fs::metadata(&second_path).unwrap().ino());
+        assert!(db.delete_note(&first.id).unwrap());
+        assert!(!first_path.exists());
+        assert!(second_path.exists());
+        assert!(db.delete_note(&second.id).unwrap());
+        assert!(!second_path.exists());
     }
 
     #[test]

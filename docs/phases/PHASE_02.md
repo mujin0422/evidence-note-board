@@ -16,8 +16,8 @@
 |---|---|
 | `backend/src/db.rs` | SQLite initialize/migration v1, CRUD text notes, view state, tests |
 | `backend/src/main.rs` | D-Bus session name, validates text/coords/zoom, exposes methods |
-| `extension/noteService.js` | Async Gio.DBusProxy, mutation queue |
-| `extension/boardView.js` | Double-click create, title/body editor, drag position, delete 2-step, restore |
+| `extension/services/noteService.js` | Async Gio.DBusProxy, mutation queue |
+| `extension/ui/boardView.js` | Double-click create, title/body editor, drag position, delete 2-step, restore |
 | `scripts/install-backend-dev.sh` | Cargo release + user systemd installation |
 | `packaging/evidence-note-board.service` | User-local service, restart on failure |
 | `docs/` | README, architecture, development, installation, testing, phase 01/02 |

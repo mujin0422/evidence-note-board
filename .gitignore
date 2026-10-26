@@ -1,0 +1,36 @@
+# Rust build products (recreated by Cargo).
+/backend/target/
+
+# Packaged GNOME extension archives (recreated by build-extension.sh).
+/dist/
+
+# Local RPM build products (recreated by rpmbuild/mock).
+/rpmbuild/
+*.rpm
+
+# Local runtime data and SQLite sidecar files.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local configuration and secrets. Keep documented examples versioned.
+.env
+.env.*
+!.env.example
+
+# Language/tool caches and local reports.
+__pycache__/
+*.py[cod]
+/coverage/
+/node_modules/
+
+# Editor and operating-system metadata.
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
