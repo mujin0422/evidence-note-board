@@ -33,6 +33,11 @@ contains(spec,f"Version:        {version}","License:        MIT",
     "%systemd_user_post evidence-note-board.service",
     "%systemd_user_preun evidence-note-board.service",
     "%systemd_user_postun_with_restart evidence-note-board.service")
+# A hotfix RPM may coexist with the previous release in dist/.
+# Package inspection must select only the current version.
+inspector=(ROOT/"scripts/check-built-rpm.sh").read_text(encoding="utf-8")
+contains(inspector,'version="$(python3 -c', 'evidence-note-board-"$version"-*.x86_64.rpm',
+    'evidence-note-board-"$version"-*.src.rpm')
 assert "cargo_generate_buildrequires" not in spec
 assert "%doc README.md extension/README.md" not in spec
 assert "cargo-rpm-macros" not in spec

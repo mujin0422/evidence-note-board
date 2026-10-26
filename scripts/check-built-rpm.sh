@@ -2,11 +2,15 @@
 # Inspect installed payload and metadata without requiring a desktop session.
 set -euo pipefail
 DIR="${1:-dist}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Keep old release packages in dist/ safely, but inspect only the
+# current Cargo/RPM version (e.g. 0.2.1 alongside 0.2.0).
+version="$(python3 -c 'import pathlib,sys,tomllib; print(tomllib.loads((pathlib.Path(sys.argv[1]) / "backend/Cargo.toml").read_text())["package"]["version"])' "$ROOT")"
 shopt -s nullglob
-rpms=("$DIR"/evidence-note-board-[0-9]*.x86_64.rpm)
-srpms=("$DIR"/evidence-note-board-[0-9]*.src.rpm)
+rpms=("$DIR"/evidence-note-board-"$version"-*.x86_64.rpm)
+srpms=("$DIR"/evidence-note-board-"$version"-*.src.rpm)
 if (( ${#rpms[@]} != 1 || ${#srpms[@]} != 1 )); then
-    echo "Expected one binary and one source RPM" >&2
+    echo "Expected one binary and one source RPM for $version" >&2
     exit 1
 fi
 rpm_file="${rpms[0]}"
