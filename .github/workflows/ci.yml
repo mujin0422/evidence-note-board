@@ -44,6 +44,7 @@ jobs:
           python3 tests/check_phase5.py
           python3 tests/check_board_interactions.py
           python3 tests/check_rich_editor.py
+          python3 tests/check_compact_hud_drag.py
           python3 -m unittest discover -s tests -p 'test_backup.py'
           bash -n scripts/install-dev.sh scripts/install-backend-dev.sh scripts/build-extension.sh scripts/setup-dev.sh
           node scripts/benchmark-geometry.mjs

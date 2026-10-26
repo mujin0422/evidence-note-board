@@ -1,5 +1,38 @@
 # Evidence Note Board
 
+## Phase 5 — Settings gọn cạnh HUD và kéo note bằng nhấn giữ
+
+- **Settings:** nút bánh răng là một hình vuông, chiều rộng và chiều
+  cao đúng bằng **chiều cao HUD**, nằm **bên trái HUD**, cách 7px.
+  Khi tắt HUD, nút bánh răng vẫn hiện ở góc trên trái.
+- **Popup:** chỉ còn `HUD: Hiện/Ẩn`, `Dây đỏ: Hiện/Ẩn` và `Đóng`.
+  Đã bỏ mục **Zoom 100%**. Menu tự ôm ba dòng nội dung, không còn
+  vùng trống thừa do chiều cao cố định.
+- **Kéo note văn bản:** nhấn và giữ khoảng 330ms vào phần chữ, sau
+  đó rê chuột để di chuyển toàn bộ note trong giới hạn board; nhả
+  chuột là thả. Click nhanh hoặc drag nhanh trên chữ vẫn đặt con
+  trỏ và **tô chọn chữ** để Ctrl+B như cũ.
+- **Kéo note và ảnh như trước:** giữ chuột trái lên đầu ghim/mép giấy,
+  hoặc phần hình ảnh và kéo; không có camera pan. Tọa độ note/ảnh
+  vẫn giới hạn trong vùng board và lưu SQLite.
+
+Cài bản thử nghiệm:
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch -c fix/phase5-settings-compact-longpress-drag --track origin/fix/phase5-settings-compact-longpress-drag
+bash scripts/setup-dev.sh
+```
+
+Logout/login GNOME Classic Wayland một lần để nạp extension JS mới.
+Không xóa database, image assets hoặc dây đỏ. Xem
+[Phase 5](docs/phases/PHASE_05.md) để nghiệm thu trước khi merge PR.
+
+---
+
+# Evidence Note Board
+
 ## Giao diện HUD + Ctrl+B (bản thử nghiệm)
 
 - Nút **Settings** dùng biểu tượng bánh răng chuẩn GNOME, kích thước

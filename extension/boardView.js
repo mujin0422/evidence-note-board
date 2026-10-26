@@ -1092,6 +1092,18 @@ export class BoardView {
         if (!this._alive)
             return Clutter.EVENT_PROPAGATE;
         const type = event.type();
+        // Capture text presses before Clutter.Text/its click gesture can
+        // consume them on GNOME 50. Keep the body handler as a fallback.
+        if (type === Clutter.EventType.BUTTON_PRESS &&
+            event.get_button()===1 && !this._dragPoint) {
+            const source=event.get_source();
+            for (const item of this._notes.values()) {
+                if (item.body===source) {
+                    this._startTextHold(event,item.note);
+                    break;
+                }
+            }
+        }
         if (type === Clutter.EventType.KEY_PRESS && this._stringDraft &&
             event.get_key_symbol() === Clutter.KEY_Escape) {
             this._cancelString();

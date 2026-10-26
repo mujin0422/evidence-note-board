@@ -168,3 +168,15 @@ Nghiệm thu hiển thị bắt buộc thử GNOME Wayland thực tế.
   chọn một đoạn khác, logout/login, chắc chắn định dạng khôi phục và
   không xuất hiện JSON thô. Ẩn HUD rồi bật lại bằng nút Settings;
   icon lớn rõ ở mọi trạng thái HUD. Kiểm tra không lỗi GJS.
+
+## Phase 5 — Compact HUD + hold-to-drag
+
+`tests/check_compact_hud_drag.py`: hình vuông Settings có kích thước
+HUD và nằm bên trái, popup tự tính chiều cao, chỉ 3 nút; giữ/nhả
+để kéo giấy từ trong editor, giữ nguyên Ctrl+B. GNOME St/Clutter
+pointer/keyboard event xử lý **chỉ có thể nghiệm thu trên Fedora**.
+
+Test tay: nhấn Settings cạnh HUD, nhìn popup 3 dòng không có vùng
+trống; ẩn/bật lại HUD; giữ text 330ms rồi kéo; nhấn giữ pin, mép
+giấy, ảnh rồi thả, note dừng ngay. Click-kéo nhanh trên text vẫn tô
+đen và Ctrl+B. Lưu/khôi phục sau logout/login và kiểm tra dây đỏ.

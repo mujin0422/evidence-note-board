@@ -19,6 +19,6 @@ assert "BUTTON2_MASK" not in source
 assert "_confineGeometry(note" in source and "_confineAllNotes(" in source
 assert "maxZoomThatFits(" in source and "confineNote(" in source
 assert "noteBounds(" in bounds and "pinPosition(" in bounds
-assert "action('Zoom 100%'" in source
+assert "action('Zoom 100%'" not in source
 assert "action(\`Zoom:" not in source
 print("Single-board gesture and bounds contracts: PASS (source only)")
