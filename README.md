@@ -1,5 +1,32 @@
 # Evidence Note Board
 
+## Giao diện HUD + Ctrl+B (bản thử nghiệm)
+
+- Nút **Settings** dùng biểu tượng bánh răng chuẩn GNOME, kích thước
+  22px với nền tối và viền tương phản; nằm **ngay bên phải HUD**, tự
+  dịch khi dòng trạng thái trên HUD thay đổi. Khi ẩn HUD, nút nằm ở góc
+  trên trái để bạn vẫn có thể bật HUD lại.
+- **In đậm:** bôi đen một đoạn chữ trong note, nhấn **Ctrl+B**.
+  Nhấn Ctrl+B lại để bỏ in đậm. Không cần tạo trường tiêu đề hay gõ dấu
+  Markdown. Vẫn nhập tiếng Việt có dấu và emoji bình thường.
+- Định dạng được lưu trong **trường `notes.content` SQLite hiện tại**,
+  không sửa schema/D-Bus. Note cũ và nội dung thuần không có định dạng
+  vẫn tương thích; chỉ note có định dạng dùng envelope version 1.
+- Các thao tác pin, dây đỏ, ảnh, zoom và tự khởi chạy được giữ nguyên.
+
+```bash
+cd ~/Code/Project/EvidenceNoteBoard
+git fetch origin
+git switch -c feat/phase5-hud-settings-richtext-bold --track origin/feat/phase5-hud-settings-richtext-bold
+bash scripts/setup-dev.sh
+```
+
+Logout/login GNOME Classic Wayland để nạp lại extension; không xóa
+`evidence.db`. Thử chọn văn bản tiếng Việt rồi Ctrl+B, edit, relogin
+để xác nhận định dạng. PR chỉ merge sau nghiệm thu Fedora.
+
+---
+
 ## Phase 5 — Thao tác tối giản, board giới hạn một màn hình
 
 - **Nhấp đúp vùng trống:** tạo note văn bản.

@@ -153,3 +153,18 @@ Nghiệm thu hiển thị bắt buộc thử GNOME Wayland thực tế.
   pan/nút tạo, Settings chỉ Zoom 100%, đúng bộ cài extension.
 - **Phải thử Fedora GNOME Classic Wayland**: pointer capture, editor,
   Ctrl+doubleclick, resize/rotate, dữ liệu đã có, DPI và logout/login.
+
+
+## HUD-Adjacent Settings + Ctrl+B rich text
+
+- \`tests/richText.test.js\` kiểm tra mã hóa có phiên bản, toggle in
+  đậm, xử lý UTF-8 / Unicode, paste/insert/delete, note cũ có title và
+  bảo toàn chuỗi khi payload hỏng.
+- \`tests/check_rich_editor.py\` kiểm tra GNOME Clutter.Text/Pango
+  attrs, vị trí icon bên HUD, pipeline lưu SQLite qua existing D-Bus,
+  đóng gói \`richText.js\`.
+- **Nghiệm thu Fedora GNOME Classic Wayland**: chọn chữ bằng chuột,
+  Ctrl+B → chữ đậm → sửa/xóa/ký tự emoji → Ctrl+B bỏ đậm;
+  chọn một đoạn khác, logout/login, chắc chắn định dạng khôi phục và
+  không xuất hiện JSON thô. Ẩn HUD rồi bật lại bằng nút Settings;
+  icon lớn rõ ở mọi trạng thái HUD. Kiểm tra không lỗi GJS.

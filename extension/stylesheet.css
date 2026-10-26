@@ -150,8 +150,24 @@
 }
 
 .evidence-settings-button {
-    background-color:#3a3330; border-color:#6c6053;
-    padding-left:13px; padding-right:13px;
+    color: #f6ead3;
+    background-color: #3c322b;
+    border: 1px solid #9e8562;
+    border-radius: 5px;
+    padding: 7px;
+    min-width: 40px;
+    min-height: 38px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.50);
+}
+.evidence-settings-button:hover,
+.evidence-settings-button:focus {
+    color: #fff5e8;
+    background-color: #5c4938;
+    border-color: #dfbd84;
+}
+.evidence-settings-icon {
+    color: #f6ead3;
+    icon-size: 22px;
 }
 .evidence-settings-menu {
     background-color:#24201c; border:1px solid #88735c;

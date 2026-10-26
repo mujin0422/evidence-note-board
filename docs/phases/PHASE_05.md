@@ -156,3 +156,27 @@ Theo yêu cầu mới, Phase 5 giới hạn vào **một board trên một màn 
 trên một màn hình có kích thước cố định là không thể; bản này giữ toàn
 bộ text trong SQLite và chặn chiều cao giấy ở mép board. Zoom >100%
 có thể bị chặn khi board chứa các note gần biên.
+
+
+## 26/10/2026 — Settings cạnh HUD + Ctrl+B trong note
+
+- Thay nút Settings có ký tự bánh răng nhỏ bằng vector icon GNOME
+  \`preferences-system-symbolic\` 22px, hitbox tối thiểu 40 × 38 px,
+  border tương phản. Nút neo 8px **bên phải chiều rộng thực HUD**,
+  giữ trong màn hình và vẫn dùng được khi HUD bị tắt.
+- Bôi đen chữ trong Clutter.Text và Ctrl+B để bật/tắt Pango bold theo
+  range đang chọn. Tất cả xử lý UTF-8 bytes/Pango và Unicode code-point
+  index được tách ra kiểm thử bằng Node.
+- Lưu document phiên bản rich-text 1 vào cột \`notes.content\` hiện có
+  (thuần text cũ không đổi). Hỗ trợ cùng note trộn chữ đậm/thường,
+  chèn/xóa, nhan đề cũ và khôi phục sau logout/login.
+- Không thêm database migration, toolbar editor, backend mới hoặc
+  dependence mạng. GJS runtime/Pango cần nghiệm thu Fedora Wayland.
+
+### Checklist
+- [ ] Nút bánh răng lớn rõ, ngang cùng HUD và tự chạy theo chiều dài HUD
+- [ ] Tắt HUD không làm mất nút Settings, bật HUD vẫn sát bên
+- [ ] Bôi đen chữ/emoji tiếng Việt Ctrl+B bật đậm, Ctrl+B lần hai bỏ
+- [ ] Gõ thêm/chèn/xóa chữ trước và sau đoạn đậm không vỡ định dạng
+- [ ] Sau logout/login văn bản thường/đậm còn nguyên, không thấy JSON
+- [ ] Pin, red strings, ảnh và camera không bị tác động
