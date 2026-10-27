@@ -1,6 +1,8 @@
 // Preserve formatted text in existing notes.content, no DB migration.
 // Selection spans count Unicode code points, Pango spans count UTF-8 bytes.
 const PREFIX = '\u001eENB_RICH_TEXT_V1\n';
+export const BADGE_PLACEHOLDER = '\ufffc';
+export const CEFR_LEVELS = Object.freeze(['A1','A2','B1','B2','C1','C2']);
 // Count Unicode code points rather than UTF-16 code units.
 export const characterLength = text => Array.from(text).length;
 
@@ -19,28 +21,81 @@ export function normalizeBoldSpans(spans,size) {
     return out;
 }
 
+// Keep only badges anchored to their reserved inline placeholder.
+export function normalizeBadges(badges,text) {
+    if (!Array.isArray(badges)) return [];
+    const chars=Array.from(text);
+    const used=new Set();
+    return badges.filter(item=>item&&Number.isInteger(item.at)&&
+        CEFR_LEVELS.includes(item.level)&&item.at>=0&&item.at<chars.length&&
+        chars[item.at]==='\ufffc'&&!used.has(item.at))
+        .sort((a,b)=>a.at-b.at)
+        .map(item=>{used.add(item.at);return {at:item.at,level:item.level};});
+}
+
+// The first badge implementation reserved width with two real spaces. Convert
+// those saved V1 documents to one object-replacement character so Backspace
+// removes the whole badge once. New payloads carry badgeUnit=1 and are not
+// ambiguous with spaces intentionally typed after a badge.
+function compactLegacyBadges(text,bold,red,badges,badgeUnit) {
+    if (badgeUnit===1 || !badges.length)
+        return {text,bold,red,badges};
+    const chars=Array.from(text);
+    const removed=new Set();
+    for (const {at} of badges) {
+        if (chars[at+1]===' ' && chars[at+2]===' ') {
+            removed.add(at+1);
+            removed.add(at+2);
+        }
+    }
+    if (!removed.size)
+        return {text,bold,red,badges};
+    const shift=position=>position-[...removed]
+        .filter(index=>index<position).length;
+    const compactText=chars.filter((_char,index)=>!removed.has(index)).join('');
+    const mapSpans=spans=>normalizeBoldSpans(
+        spans.map(([start,end])=>[shift(start),shift(end)]),
+        characterLength(compactText));
+    return {
+        text:compactText,
+        bold:mapSpans(bold),
+        red:mapSpans(red),
+        badges:normalizeBadges(badges.map(item=>({...item,at:shift(item.at)})),
+            compactText),
+    };
+}
+
 // Decode the versioned payload, preserving unrecognized content as plain text.
 export function decodeRichText(rawInput) {
     const raw=typeof rawInput==='string'?rawInput:'';
-    if (!raw.startsWith(PREFIX)) return {text:raw,bold:[]};
+    if (!raw.startsWith(PREFIX)) return {text:raw,bold:[],red:[],badges:[]};
     try {
         const doc=JSON.parse(raw.slice(PREFIX.length));
         if (!doc||doc.version!==1||typeof doc.text!=='string'||!Array.isArray(doc.bold)||
             !doc.bold.every(s=>Array.isArray(s)&&s.length===2&&Number.isInteger(s[0])&&
                 Number.isInteger(s[1])&&s[0]>=0&&s[1]>s[0]&&
                 s[1]<=characterLength(doc.text)))
-            return {text:raw,bold:[]};
-        return {text:doc.text,bold:normalizeBoldSpans(doc.bold,characterLength(doc.text))};
+            return {text:raw,bold:[],red:[],badges:[]};
+        const size=characterLength(doc.text);
+        return compactLegacyBadges(doc.text,
+            normalizeBoldSpans(doc.bold,size),
+            normalizeBoldSpans(doc.red??[],size),
+            normalizeBadges(doc.badges??[],doc.text),doc.badgeUnit);
     } catch {
-        return {text:raw,bold:[]}; // Unrecognized user text must stay visible.
+        return {text:raw,bold:[],red:[],badges:[]};
     }
 }
 
 // Store plain text directly unless formatting requires the versioned envelope.
-export function encodeRichText(text,spans) {
-    const bold=normalizeBoldSpans(spans,characterLength(text));
-    if (!bold.length&&!text.startsWith(PREFIX)) return text;
-    return PREFIX+JSON.stringify({version:1,text,bold});
+export function encodeRichText(text,spans,redSpans=[],badges=[]) {
+    const size=characterLength(text);
+    const bold=normalizeBoldSpans(spans,size);
+    const red=normalizeBoldSpans(redSpans,size);
+    const safeBadges=normalizeBadges(badges,text);
+    if (!bold.length&&!red.length&&!safeBadges.length&&!text.startsWith(PREFIX))
+        return text;
+    return PREFIX+JSON.stringify({version:1,text,bold,red,badges:safeBadges,
+        badgeUnit:1});
 }
 
 // Merge legacy titles into display text while shifting format ranges.
@@ -51,7 +106,9 @@ export function richTextForNote(note) {
     const prefix=doc.text?title+'\n':title;
     const offset=characterLength(prefix);
     return {text:prefix+doc.text,
-        bold:doc.bold.map(([a,b])=>[a+offset,b+offset])};
+        bold:doc.bold.map(([a,b])=>[a+offset,b+offset]),
+        red:doc.red.map(([a,b])=>[a+offset,b+offset]),
+        badges:doc.badges.map(item=>({...item,at:item.at+offset}))};
 }
 
 // Test whether every character in a selection is already bold.
@@ -106,6 +163,39 @@ export function rebaseBoldSpans(previous,current,spans) {
         (removedEnd>start&&selectionIsBold(ranges,start,removedEnd)));
     if (inherit) updated.push([start,insertedEnd]);
     return normalizeBoldSpans(updated,after.length);
+}
+
+// Shift badge anchors across one contiguous edit and drop deleted badges.
+export function rebaseBadges(previous,current,badges) {
+    const before=Array.from(previous),after=Array.from(current);
+    let start=0;
+    while (start<before.length&&start<after.length&&before[start]===after[start]) start++;
+    let suffix=0;
+    while (suffix<before.length-start&&suffix<after.length-start&&
+        before[before.length-1-suffix]===after[after.length-1-suffix]) suffix++;
+    const removedEnd=before.length-suffix;
+    const delta=after.length-before.length;
+    return normalizeBadges((badges??[]).flatMap(item=>{
+        if (item.at<start) return [item];
+        if (item.at>=removedEnd) return [{...item,at:item.at+delta}];
+        return [];
+    }),current);
+}
+
+// Insert a CEFR badge placeholder while keeping existing anchors stable.
+export function insertBadge(text,badges,position,level) {
+    const chars=Array.from(text);
+    const at=Math.max(0,Math.min(chars.length,
+        Number.isInteger(position)?position:chars.length));
+    if (!CEFR_LEVELS.includes(level))
+        return {text,badges:normalizeBadges(badges,text),cursor:at};
+    chars.splice(at,0,...Array.from(BADGE_PLACEHOLDER));
+    const next=chars.join('');
+    const shifted=(badges??[]).map(item=>item.at>=at
+        ? {...item,at:item.at+characterLength(BADGE_PLACEHOLDER)} : item);
+    shifted.push({at,level});
+    return {text:next,badges:normalizeBadges(shifted,next),
+        cursor:at+characterLength(BADGE_PLACEHOLDER)};
 }
 
 // Convert a Unicode character index to the UTF-8 byte offset Pango expects.

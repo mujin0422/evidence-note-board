@@ -28,8 +28,8 @@ test('image never shrinks below minimum or grows unbounded', () => {
 });
 
 test('text height grows with content but has minimum', () => {
-    assert.equal(requiredPaperHeight(50), 185);
-    assert.equal(requiredPaperHeight(400), 485);
+    assert.equal(requiredPaperHeight(50), 110);
+    assert.equal(requiredPaperHeight(400), 424);
     assert.equal(requiredPaperHeight(10000), 6000);
 });
 

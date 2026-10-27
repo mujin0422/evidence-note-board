@@ -32,9 +32,9 @@ print("Phase 2 body-only editor source checks: OK (not GNOME UI test)")
 # Regression for zero-length text: the editor must not collapse and must
 # refocus even when GNOME picks the board instead of the paper.
 for token in (
-    "x_expand: true,", "y_expand: true,",
-    "x_align: Clutter.ActorAlign.FILL",
-    "y_align: Clutter.ActorAlign.FILL",
+    "layout_manager:new Clutter.FixedLayout()",
+    "body.set_position(TEXT_HORIZONTAL_PADDING,TEXT_VERTICAL_PADDING)",
+    "note.height-TEXT_VERTICAL_CHROME",
     "_focusEmptyTextAt(stageX,stageY)",
     "this._focusEmptyTextAt(x,y)",
     "isEmptyTextEditorHit(note,body.get_text(),x,y,",

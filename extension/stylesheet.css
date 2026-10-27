@@ -14,10 +14,50 @@
 }
 .evidence-paper {
     background-color: #e9d898;
-    padding: 12px 16px;
+    padding: 0;
     border-radius: 3px;
     box-shadow: 0 7px 16px rgba(0, 0, 0, 0.55);
     spacing: 7px;
+}
+.evidence-note-menu {
+    background-color: #25201d;
+    border: 1px solid #88735c;
+    border-radius: 5px;
+    box-shadow: 0 9px 22px rgba(0, 0, 0, 0.75);
+    padding: 9px;
+    spacing: 5px;
+    min-width: 220px;
+}
+.evidence-note-menu-title {
+    color: #cabda6;
+    font-size: 10px;
+    font-weight: bold;
+}
+.evidence-note-menu-row { spacing: 5px; }
+.evidence-note-menu-action {
+    color: #eee3d1;
+    background-color: #47392f;
+    border: 1px solid #6a4c3f;
+    border-radius: 3px;
+    padding: 6px 9px;
+    font-size: 12px;
+}
+.evidence-paper-swatch {
+    color: #111111;
+    border: 1px solid #111111;
+    border-radius: 4px;
+    min-width: 27px;
+    min-height: 25px;
+    padding: 0;
+}
+.evidence-cefr-badge {
+    color: #514837;
+    border: 2px solid #514837;
+    border-radius: 4px;
+    padding: 0 4px;
+    margin-right: 4px;
+    font-size: 10px;
+    font-weight: 900;
 }
 .evidence-paper-aged {
     background-color: #e9d898;

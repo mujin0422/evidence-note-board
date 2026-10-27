@@ -19,7 +19,7 @@ for value in (
     "byteOffsetForCharacter(text,start)", "set_attributes(list)",
     "Clutter.KEY_b", "Clutter.KEY_B", "body.get_selection()",
     "richTextForNote(note)", "toggleBoldSpans(", "rebaseBoldSpans(",
-    "encodeRichText(item.body.get_text(),item.boldSpans)",
+    "encodeRichText(item.body.get_text(),item.boldSpans,",
     "this._scheduleNote(item.note.id)",
 ):
     assert value in js,value

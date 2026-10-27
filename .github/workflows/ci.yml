@@ -47,6 +47,7 @@ jobs:
           python3 tests/check_board_interactions.py
           python3 tests/check_board_pan.py
           python3 tests/check_rich_editor.py
+          python3 tests/check_note_context_menu.py
           python3 tests/check_compact_hud_drag.py
           python3 tests/check_rpm_packaging.py
           python3 tests/check_resource_efficiency.py
