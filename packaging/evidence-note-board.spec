@@ -1,7 +1,7 @@
 %global uuid evidence-note-board@mujin0422.github.io
 
 Name:           evidence-note-board
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Local-first evidence board for GNOME Shell
 
@@ -89,6 +89,11 @@ bash -n scripts/*.sh
 %{_datadir}/gnome-shell/extensions/%{uuid}/
 
 %changelog
+* Tue Oct 27 2026 mujin0422 - 0.3.0-1
+- Add paper colors and reversible dark-red text formatting
+- Add inline single-character CEFR badges
+- Restore compact automatic text-note sizing
+
 * Mon Oct 26 2026 mujin0422 - 0.2.1-1
 - Restore focus to empty notes and keep Clutter.Text's hit area allocated
 

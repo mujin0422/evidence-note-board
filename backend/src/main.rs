@@ -13,6 +13,7 @@ use zbus::{connection, interface};
 
 const SERVICE: &str = "io.github.mujin0422.EvidenceNoteBoard";
 const OBJECT: &str = "/io/github/mujin0422/EvidenceNoteBoard";
+const PAPER_COLORS: [&str; 5] = ["#E9D898", "#EFE2AD", "#F4EBC6", "#FAF6E4", "#FFFFFF"];
 
 /// D-Bus object containing synchronized access to storage and preferences.
 struct NoteApi {
@@ -122,6 +123,17 @@ impl NoteApi {
         validate_geometry(width, height, rotation)?;
         if !self.with_db(|db| db.update_geometry(id, width, height, rotation))? {
             return Err(zbus::fdo::Error::Failed("Note not found".into()));
+        }
+        Ok(())
+    }
+
+    /// Save a paper color from the fixed UI palette.
+    fn update_color(&self, id: &str, color: &str) -> zbus::fdo::Result<()> {
+        if !PAPER_COLORS.contains(&color) {
+            return Err(zbus::fdo::Error::InvalidArgs("Unsupported paper color".into()));
+        }
+        if !self.with_db(|db| db.update_color(id, color))? {
+            return Err(zbus::fdo::Error::Failed("Text note not found".into()));
         }
         Ok(())
     }
@@ -242,5 +254,7 @@ mod tests {
         assert!(validate_geometry(180.0, 110.0, 0.0).is_ok());
         assert!(validate_geometry(179.0, 110.0, 0.0).is_err());
         assert!(validate_geometry(350.0, 310.0, f64::NAN).is_err());
+        assert!(PAPER_COLORS.contains(&"#FFFFFF"));
+        assert!(!PAPER_COLORS.contains(&"#000000"));
     }
 }

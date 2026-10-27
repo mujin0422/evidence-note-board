@@ -26,6 +26,9 @@ const XML = `<node>
       <arg type="s" direction="in"/><arg type="d" direction="in"/>
       <arg type="d" direction="in"/><arg type="d" direction="in"/>
     </method>
+    <method name="UpdateColor">
+      <arg type="s" direction="in"/><arg type="s" direction="in"/>
+    </method>
     <method name="ListConnections"><arg type="s" direction="out"/></method>
     <method name="CreateConnection">
       <arg type="s" direction="in"/><arg type="s" direction="in"/>
@@ -135,6 +138,11 @@ export class NoteService {
     updateGeometry(id, width, height, rotation) {
         return this._enqueue(() =>
             this._proxy.UpdateGeometryAsync(id, width, height, rotation));
+    }
+
+    // Persist a text note's paper color from the fixed palette.
+    updateColor(id, color) {
+        return this._enqueue(() => this._proxy.UpdateColorAsync(id, color));
     }
 
     // Fetch and decode all red-string edges.

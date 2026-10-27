@@ -268,6 +268,15 @@ impl Storage {
         )? == 1)
     }
 
+    /// Persist one validated paper color for a text note.
+    pub fn update_color(&self, id: &str, color: &str) -> Result<bool> {
+        Ok(self.conn.execute(
+            "UPDATE notes SET color=?1, updated_at=unixepoch()
+             WHERE id=?2 AND board_id=?3 AND type='text'",
+            params![color, id, BOARD_ID],
+        )? == 1)
+    }
+
     /// Red strings are edges between stable pin IDs, resolved from note IDs.
     /// SQLite foreign keys cascade when either note/pin is removed.
     pub fn list_connections(&self) -> Result<Vec<ConnectionEdge>> {
@@ -396,11 +405,13 @@ mod tests {
         assert_eq!(db.list_notes().unwrap().len(), 1);
         assert_eq!(n.content, "Dòng 1\nDòng 2");
         assert!(db.update_note(&n.id, "Đã sửa", "Xin chào").unwrap());
+        assert!(db.update_color(&n.id, "#FFFFFF").unwrap());
         assert!(db.move_note(&n.id, -50.0, 99.0).unwrap());
         let saved = db.list_notes().unwrap().remove(0);
         assert_eq!(saved.x, -50.0);
         assert_eq!(saved.title, "Đã sửa");
         assert_eq!(saved.content, "Xin chào");
+        assert_eq!(saved.color, "#FFFFFF");
         assert!(db.delete_note(&n.id).unwrap());
         assert!(!db.delete_note(&n.id).unwrap());
         assert!(db.list_notes().unwrap().is_empty());

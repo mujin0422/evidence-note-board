@@ -40,12 +40,25 @@ start() {
 
 start
 busctl --user introspect "$SERVICE" "$OBJECT" | grep -q CreateNote
+busctl --user introspect "$SERVICE" "$OBJECT" | grep -q UpdateColor
 first="$(busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" ListNotes)"
 [[ "$first" == *'[]'* ]] || { echo "Expected empty board" >&2; exit 1; }
 
 busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" CreateNote ssdd "Smoke Test" "Xin chào" 17.0 23.0 >/dev/null
 stored="$(busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" ListNotes)"
 [[ "$stored" == *'Smoke Test'* ]] || { echo "Note not found after create" >&2; exit 1; }
+note_id="$(grep -oE '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' \
+    <<<"$stored" | head -n1)"
+[[ -n "$note_id" ]] || { echo "Could not read created note ID" >&2; exit 1; }
+busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" UpdateColor ss \
+    "$note_id" "#FFFFFF" >/dev/null
+stored="$(busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" ListNotes)"
+[[ "$stored" == *'#FFFFFF'* ]] || { echo "Paper color was not persisted" >&2; exit 1; }
+if busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" UpdateColor ss \
+    "$note_id" "#000000" >/dev/null 2>&1; then
+    echo "Unsupported paper color was accepted" >&2
+    exit 1
+fi
 
 # Restart service process and verify durable SQLite data.
 kill "$PID" 2>/dev/null || true
@@ -54,5 +67,6 @@ PID=""
 start
 restored="$(busctl --user call "$SERVICE" "$OBJECT" "$SERVICE" ListNotes)"
 [[ "$restored" == *'Smoke Test'* ]] || { echo "Persistence failed after restart" >&2; exit 1; }
+[[ "$restored" == *'#FFFFFF'* ]] || { echo "Paper color failed after restart" >&2; exit 1; }
 test -s "$XDG_DATA_HOME/evidence-note-board/evidence.db"
 echo "D-Bus / SQLite smoke test passed"

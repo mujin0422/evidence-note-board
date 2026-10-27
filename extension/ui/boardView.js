@@ -20,17 +20,23 @@ import {DoubleClickTracker} from '../input/doubleClickTracker.js';
 import {isEmptyBoardPoint,isEmptyTextEditorHit,isTextEditorHit} from '../input/noteHitTest.js';
 import {hasLegacyTitle} from '../model/noteContent.js';
 import {richTextForNote,encodeRichText,toggleBoldSpans,rebaseBoldSpans,
-    byteOffsetForCharacter,characterLength} from '../model/richText.js';
+    rebaseBadges,insertBadge,CEFR_LEVELS,selectionIsBold,
+    byteOffsetForCharacter,characterLength}
+    from '../model/richText.js';
 import {PIN_SIZE, pinPosition} from '../geometry/pinMath.js';
 import {pinCenter, worldToScreen, menuNearPin, stringControlPoints, nearestTargetPin}
     from '../geometry/stringMath.js';
-import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt, pointerAngle, angleDelta, normalizeAngle} from '../geometry/noteGeometry.js';
+import {resizedTextWidth, resizedImage, requiredPaperHeight, gestureAt,
+    pointerAngle, angleDelta, normalizeAngle, TEXT_HORIZONTAL_PADDING,
+    TEXT_VERTICAL_PADDING, TEXT_VERTICAL_CHROME} from '../geometry/noteGeometry.js';
 import {boundedImageDecodeSize} from '../geometry/imageSizing.js';
 import {DEFAULT_PREFERENCES,singleScreenLayout,curveVisible,reconnectDelay}
     from '../core/runtimePolicy.js';
 
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 const CARET_BLINK_MS = 530;
+const PAPER_COLORS = Object.freeze(['#E9D898','#EFE2AD','#F4EBC6','#FAF6E4','#FFFFFF']);
+const DARK_RED = '#7A1F1F';
 
 export class BoardView {
     // Initialize state only; GNOME actors are created later by mount().
@@ -50,6 +56,7 @@ export class BoardView {
         this._resizeTimer = 0;
         this._resizeSession = null;
         this._pinMenu = null;
+        this._noteMenu = null;
         this._stringsLayer = null;
         this._connections = new Map();
         this._stringDraft = null;
@@ -301,12 +308,135 @@ export class BoardView {
         this._settingsMenu=null;
     }
 
+    // Destroy the note/text context menu and release its actor references.
+    _closeNoteMenu() {
+        this._noteMenu?.destroy();
+        this._noteMenu=null;
+    }
+
+    // Return the current non-empty character selection in ascending order.
+    _textSelection(item) {
+        const length=characterLength(item.body.get_text());
+        const cursor=item.body.get_cursor_position();
+        const bound=item.body.get_selection_bound();
+        const a=cursor<0?length:cursor, b=bound<0?length:bound;
+        return a===b?null:[Math.min(a,b),Math.max(a,b)];
+    }
+
+    // Apply a palette color immediately, then persist or roll back on error.
+    _setPaperColor(item,color) {
+        if (!PAPER_COLORS.includes(color) || !this._service)
+            return;
+        const previous=item.note.color;
+        item.note.color=color;
+        this._applyPaperColor(item);
+        this._closeNoteMenu();
+        this._service.updateColor(item.note.id,color).catch(()=>{
+            item.note.color=previous;
+            this._applyPaperColor(item);
+            this._saveError();
+        });
+    }
+
+    // Toggle the single supported dark-red foreground on the saved selection.
+    _toggleSelectionDarkRed(item,selection=null) {
+        selection??=this._textSelection(item);
+        if (!selection)
+            return;
+        item.redSpans=toggleBoldSpans(item.redSpans,
+            selection[0],selection[1],characterLength(item.body.get_text()));
+        this._applyBoldAttributes(item);
+        this._scheduleNote(item.note.id);
+        this._closeNoteMenu();
+    }
+
+    // Insert one persisted CEFR badge at the current text cursor.
+    _insertCefrBadge(item,level,insertionPosition=null) {
+        const body=item.body;
+        const length=characterLength(body.get_text());
+        const cursor=body.get_cursor_position();
+        const at=Number.isInteger(insertionPosition)
+            ? insertionPosition : cursor<0?length:cursor;
+        const result=insertBadge(body.get_text(),item.badges,at,level);
+        body.set_text(result.text);
+        item.badges=result.badges;
+        item.lastText=result.text;
+        body.set_cursor_position(result.cursor);
+        body.set_selection_bound(result.cursor);
+        this._applyBoldAttributes(item);
+        this._scheduleNote(item.note.id);
+        this._closeNoteMenu();
+    }
+
+    // Open paper-color actions and text-only formatting/badge actions.
+    _openNoteMenu(item,event,withTextActions) {
+        this._closeNoteMenu();
+        this._closePinMenu();
+        this._closeSettingsMenu();
+        const menu=new St.BoxLayout({reactive:true,
+            orientation:Clutter.Orientation.VERTICAL,
+            style_class:'evidence-note-menu'});
+        menu.add_child(new St.Label({text:'MÀU GIẤY',reactive:false,
+            style_class:'evidence-note-menu-title'}));
+        const colors=new St.BoxLayout({reactive:true,
+            style_class:'evidence-note-menu-row'});
+        for (const color of PAPER_COLORS) {
+            const swatch=new St.Button({can_focus:true,
+                accessible_name:`Màu giấy ${color}`,
+                style_class:'evidence-paper-swatch',
+                style:`background-color:${color};`});
+            swatch.connect('clicked',()=>this._setPaperColor(item,color));
+            colors.add_child(swatch);
+        }
+        menu.add_child(colors);
+        if (withTextActions) {
+            const selection=this._textSelection(item);
+            if (selection) {
+                const isRed=selectionIsBold(item.redSpans,
+                    selection[0],selection[1]);
+                const red=new St.Button({
+                    label:isRed?'Chuyển về màu gốc':'Chữ đỏ thẫm',can_focus:true,
+                    style_class:'evidence-note-menu-action'});
+                red.connect('clicked',()=>this._toggleSelectionDarkRed(item,selection));
+                menu.add_child(red);
+            }
+            menu.add_child(new St.Label({text:'CHÈN CẤP ĐỘ',reactive:false,
+                style_class:'evidence-note-menu-title'}));
+            const levels=new St.BoxLayout({reactive:true,
+                style_class:'evidence-note-menu-row'});
+            const insertionPosition=item.body.get_cursor_position();
+            for (const level of CEFR_LEVELS) {
+                const badge=new St.Button({label:level,can_focus:true,
+                    style_class:'evidence-note-menu-action'});
+                badge.connect('clicked',()=>this._insertCefrBadge(
+                    item,level,insertionPosition));
+                levels.add_child(badge);
+            }
+            menu.add_child(levels);
+        }
+        const close=new St.Button({label:'Đóng',can_focus:true,
+            style_class:'evidence-note-menu-action'});
+        close.connect('clicked',()=>this._closeNoteMenu());
+        menu.add_child(close);
+        const [x,y]=event.get_coords();
+        const width=250;
+        menu.set_width(width);
+        this._root.add_child(menu);
+        const [,naturalHeight]=menu.get_preferred_height(width);
+        if (naturalHeight>0) menu.set_height(Math.ceil(naturalHeight));
+        menu.set_position(
+            Math.max(4,Math.min(this._root.width-width-4,x)),
+            Math.max(4,Math.min(this._root.height-(naturalHeight||180)-4,y)));
+        this._noteMenu=menu;
+    }
+
     // Create or close the compact settings popover.
     _toggleSettingsMenu() {
         if (this._settingsMenu) {
             this._closeSettingsMenu();
             return;
         }
+        this._closeNoteMenu();
         this._closePinMenu();
         const menu=new St.BoxLayout({
             reactive:true,orientation:Clutter.Orientation.VERTICAL,
@@ -387,6 +517,7 @@ export class BoardView {
         this._hud?.set_position(c.hud.x,c.hud.y);
         this._positionSettingsButton();
         this._closeSettingsMenu();
+        this._closeNoteMenu();
         if (this._stringsLayer) {
             this._stringsLayer.set_size(global.stage.width, global.stage.height);
             this._queueStrings();
@@ -640,8 +771,11 @@ export class BoardView {
             item.photo?.set_size(Math.max(60, note.width - 24),
                 Math.max(60, note.height - 48));
         } else if (item.body) {
-            item.body.set_size(Math.max(120, note.width - 32),
-                Math.max(90, note.height - 85));
+            item.body.set_position(TEXT_HORIZONTAL_PADDING,TEXT_VERTICAL_PADDING);
+            item.body.set_size(
+                Math.max(120,note.width-TEXT_HORIZONTAL_PADDING*2),
+                Math.max(1,note.height-TEXT_VERTICAL_CHROME));
+            this._renderBadges(item);
         }
     }
 
@@ -662,7 +796,45 @@ export class BoardView {
             });
     }
 
-    // Convert character-based bold spans into Pango byte attributes.
+    // Keep the actor and inline CEFR badges on the persisted paper color.
+    _applyPaperColor(item) {
+        const color=PAPER_COLORS.includes(item.note.color)
+            ? item.note.color : PAPER_COLORS[0];
+        item.actor.set_style(`background-color:${color};`);
+        for (const badge of item.badgeActors??[])
+            badge.set_style(`background-color:${color};`);
+        this._applyBoldAttributes(item);
+    }
+
+    // Position rounded CEFR labels over their reserved inline placeholders.
+    _renderBadges(item) {
+        for (const actor of item.badgeActors??[])
+            actor.destroy();
+        item.badgeActors=[];
+        const layout=item.body.get_layout();
+        if (!layout)
+            return;
+        const paperColor=PAPER_COLORS.includes(item.note.color)
+            ? item.note.color : PAPER_COLORS[0];
+        for (const badge of item.badges) {
+            try {
+                const rect=layout.index_to_pos(
+                    byteOffsetForCharacter(item.body.get_text(),badge.at));
+                const actor=new St.Label({text:badge.level,reactive:false,
+                    style_class:'evidence-cefr-badge',
+                    style:`background-color:${paperColor};`});
+                item.actor.add_child(actor);
+                actor.set_position(
+                    TEXT_HORIZONTAL_PADDING+Math.floor(rect.x/Pango.SCALE),
+                    TEXT_VERTICAL_PADDING+Math.floor(rect.y/Pango.SCALE));
+                item.badgeActors.push(actor);
+            } catch (error) {
+                console.warn('Evidence Note Board: cannot position CEFR badge',error.message);
+            }
+        }
+    }
+
+    // Convert character-based formatting spans into Pango byte attributes.
     _applyBoldAttributes(item) {
         if (!item?.body)
             return;
@@ -674,7 +846,31 @@ export class BoardView {
             attribute.end_index=byteOffsetForCharacter(text,end);
             list.insert(attribute);
         }
+        for (const [start,end] of item.redSpans) {
+            const red=DARK_RED.slice(1).match(/../g)
+                .map(value=>parseInt(value,16)*257);
+            const attribute=Pango.attr_foreground_new(...red);
+            attribute.start_index=byteOffsetForCharacter(text,start);
+            attribute.end_index=byteOffsetForCharacter(text,end);
+            list.insert(attribute);
+        }
+        const paperColor=PAPER_COLORS.includes(item.note.color)
+            ? item.note.color : PAPER_COLORS[0];
+        const rgb=paperColor.slice(1).match(/../g).map(value=>parseInt(value,16)*257);
+        for (const badge of item.badges) {
+            const attribute=Pango.attr_foreground_new(...rgb);
+            attribute.start_index=byteOffsetForCharacter(text,badge.at);
+            attribute.end_index=byteOffsetForCharacter(text,badge.at+1);
+            list.insert(attribute);
+            // Reserve enough visual width for the overlaid two-letter badge
+            // without storing extra deletable spaces in the user's text.
+            const spacing=Pango.attr_letter_spacing_new(15*Pango.SCALE);
+            spacing.start_index=attribute.start_index;
+            spacing.end_index=attribute.end_index;
+            list.insert(spacing);
+        }
         item.body.set_attributes(list);
+        this._renderBadges(item);
     }
 
     // Toggle bold for the editor's current selection.
@@ -700,18 +896,24 @@ export class BoardView {
         const item = this._notes.get(note.id);
         if (!item?.body || !this._alive)
             return;
-        // The Pango layout reflects wrapped lines at the allocated body width.
-        const layout = item.body.get_layout();
-        if (!layout)
-            return;
-        const [, pixels] = layout.get_pixel_size();
-        const required=Math.min(requiredPaperHeight(pixels),
-            Math.max(185,this._boardSize.height-60));
+        // Preferred height measures the unconstrained wrapped content. Using
+        // get_pixel_size() here would read the already allocated body height,
+        // causing a feedback loop that could grow but never shrink.
+        const width=Math.max(120,note.width-TEXT_HORIZONTAL_PADDING*2);
+        // Remove the explicit old paper height before asking Clutter for its
+        // natural wrapped height; otherwise it reports the existing allocation
+        // and newly typed lines can be clipped below the paper.
+        item.body.set_width(width);
+        item.body.set_height(-1);
+        const [,naturalHeight]=item.body.get_preferred_height(width);
+        const required=Math.min(requiredPaperHeight(naturalHeight),
+            Math.max(110,this._boardSize.height-60));
         if (note.height !== required) {
             note.height = required;
             this._applyGeometry(note);
             this._scheduleNote(note.id);
-        }
+        } else
+            item.body.set_height(Math.max(1,note.height-TEXT_VERTICAL_CHROME));
     }
 
     // Create the independent pushpin actor and bind its pointer actions.
@@ -799,6 +1001,7 @@ export class BoardView {
             this._closePinMenu();
             return;
         }
+        this._closeNoteMenu();
         this._closePinMenu();
         this._cancelString();
         // IMPORTANT: menu is a SCREEN-SPACE overlay. It is not scaled or
@@ -1056,9 +1259,19 @@ export class BoardView {
             }
             this._closePinMenu();
         }
+        if (this._noteMenu) {
+            const actor=this._noteMenu;
+            const inside=x>=actor.x && y>=actor.y &&
+                x<=actor.x+actor.width && y<=actor.y+actor.height;
+            if (inside) {
+                this._doubleClick.reset();
+                return Clutter.EVENT_PROPAGATE;
+            }
+            this._closeNoteMenu();
+        }
         const uiRects=[];
         // The HUD is non-interactive, only Settings excludes gestures.
-        for (const actor of [this._settingsButton,this._settingsMenu]) {
+        for (const actor of [this._settingsButton,this._settingsMenu,this._noteMenu]) {
             if (!actor)
                 continue;
             const [ax,ay]=actor.get_position();
@@ -1232,6 +1445,12 @@ export class BoardView {
     // Bind paper-level gestures while preserving native text editing.
     _connectPaperGestures(paper, note) {
         paper.connect('button-press-event', (_actor, event) => {
+            if (event.get_button()===3 && note.type==='text') {
+                const item=this._notes.get(note.id);
+                if (item)
+                    this._openNoteMenu(item,event,false);
+                return Clutter.EVENT_STOP;
+            }
             const result = this._startPaperGesture(event, note, paper);
             if (result === Clutter.EVENT_STOP)
                 return result;
@@ -1322,6 +1541,9 @@ export class BoardView {
             this._settingsButton?.contains(source) ||
             (this._settingsMenu && this._settingsMenu.contains(source))))
             return false;
+        // Context-menu actions need the selection/cursor that opened them.
+        if (source && this._noteMenu?.contains(source))
+            return true;
         if (source && this._bodyNotes.has(source))
             return true;
         // Wayland sometimes picks the PAPER rather than a zero-glyph
@@ -1531,9 +1753,9 @@ export class BoardView {
             return;
         this._confineGeometry(note,true);
 
-        const paper = new St.BoxLayout({
+        const paper = new St.Widget({
             reactive: true,
-            orientation: Clutter.Orientation.VERTICAL,
+            layout_manager:new Clutter.FixedLayout(),
             style_class: 'evidence-paper evidence-paper-aged',
         });
         paper.set_size(note.width, note.height);
@@ -1554,26 +1776,28 @@ export class BoardView {
             editable: true,
             selectable: true,
             cursor_visible: false, // Only visible while this note has focus.
-            // An empty Clutter.Text still needs the full clickable area
-            // allocated by the paper's St.BoxLayout.
-            x_expand: true,
-            y_expand: true,
-            x_align: Clutter.ActorAlign.FILL,
-            y_align: Clutter.ActorAlign.FILL,
             single_line_mode: false,
             activatable: false,
             line_wrap: true,
             line_wrap_mode: Pango.WrapMode.WORD_CHAR,
             color: ink,
         });
-        // Fill the paper below the handle, including when initially empty.
+        // Fixed coordinates leave exactly the configured paper padding and
+        // allow inline badge actors to sit above the editable text.
+        body.set_position(TEXT_HORIZONTAL_PADDING,TEXT_VERTICAL_PADDING);
         body.set_size(
-            Math.max(120, note.width - 32),
-            Math.max(90, note.height - 85)
+            Math.max(120,note.width-TEXT_HORIZONTAL_PADDING*2),
+            Math.max(1,note.height-TEXT_VERTICAL_CHROME)
         );
         body.connect('button-press-event', (_actor,event) => {
             global.stage.set_key_focus(body);
             this._syncCaretFocus();
+            if (event.get_button()===3) {
+                // Preserve the blinking cursor/selection exactly as-is. Menu
+                // actions capture this position before their buttons take focus.
+                this._openNoteMenu(item,event,true);
+                return Clutter.EVENT_STOP;
+            }
             // A quick drag highlights words (Ctrl+B stays intact).
             // Hold the text for ~330ms before moving to drag the paper.
             this._startTextHold(event,note);
@@ -1584,7 +1808,8 @@ export class BoardView {
         this._connectPaperGestures(paper, note);
 
         const item={note,actor:paper,body,
-            boldSpans:rich.bold,lastText:rich.text,
+            boldSpans:rich.bold,redSpans:rich.red,badges:rich.badges,
+            badgeActors:[],lastText:rich.text,
             persistedGeometry:{width:note.width,height:note.height,
                 rotation:note.rotation}};
         this._bodyNotes.set(body,note);
@@ -1600,13 +1825,15 @@ export class BoardView {
         body.connect('notify::text', () => {
             const latest=body.get_text();
             item.boldSpans=rebaseBoldSpans(item.lastText,latest,item.boldSpans);
+            item.redSpans=rebaseBoldSpans(item.lastText,latest,item.redSpans);
+            item.badges=rebaseBadges(item.lastText,latest,item.badges);
             item.lastText=latest;
             this._applyBoldAttributes(item);
             this._syncTextHeight(note);
             this._scheduleNote(note.id);
         });
         this._notes.set(note.id, item);
-        this._applyBoldAttributes(item);
+        this._applyPaperColor(item);
         this._world.add_child(paper);
         this._installPin(note);
         this._applyGeometry(note);
@@ -1655,7 +1882,8 @@ export class BoardView {
             return;
         if (!item.body) // Image notes contain no editable text.
             return;
-        const content=encodeRichText(item.body.get_text(),item.boldSpans);
+        const content=encodeRichText(item.body.get_text(),item.boldSpans,
+            item.redSpans,item.badges);
         // Persist geometry only if wrapping actually changed the paper size.
         this._persistGeometry(item.note)
             .catch(() => this._saveError());
@@ -1663,7 +1891,8 @@ export class BoardView {
         // using an empty legacy title for body-only notes.
         this._service.updateNote(id, '', content).then(()=>{
             if (this._alive && item.body &&
-                encodeRichText(item.body.get_text(),item.boldSpans)===content)
+                encodeRichText(item.body.get_text(),item.boldSpans,
+                    item.redSpans,item.badges)===content)
                 this._dirtyNotes.delete(id);
         }).catch(()=>{
             this._dirtyNotes.add(id);
@@ -1687,6 +1916,7 @@ export class BoardView {
         this._endBoardPan();
         this._cancelTextHold();
         this._cancelString();
+        this._closeNoteMenu();
         this._closePinMenu();
         this._deletingNotes.clear();
         this._connections.clear();
