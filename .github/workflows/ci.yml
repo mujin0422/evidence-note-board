@@ -34,6 +34,7 @@ jobs:
       - name: Schema and metadata
         run: |
           python3 tests/check_migration.py
+          python3 tests/check_multi_board.py
           python3 tests/check_extension.py
           python3 tests/check_gnome50_api.py
           python3 tests/check_note_editor.py
