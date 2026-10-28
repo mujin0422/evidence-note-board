@@ -74,7 +74,7 @@ jobs:
             echo "Fedora 44 GNOME Shell 50 / GNOME Classic Wayland."
             echo "RPM must be enabled as a per-user GNOME extension after installation."
             echo "Back up existing notes and remove development ~/.local overrides before switching."
-            echo "No SQLite schema changes; uninstall preserves user data."
+            echo "v0.4.0 migrates SQLite schema v1 to v2. Back up before upgrading; downgrading requires restoring a pre-upgrade backup. Uninstall preserves user data."
             echo
             echo "## Recent commits"
             git log --format='- %s' -n 30
