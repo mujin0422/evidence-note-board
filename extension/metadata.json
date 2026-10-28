@@ -4,5 +4,5 @@
   "description": "Local-first desktop evidence board with pinned text, photos and red strings",
   "shell-version": ["50"],
   "url": "https://github.com/mujin0422/evidence-note-board",
-  "version": 21
+  "version": 22
 }
