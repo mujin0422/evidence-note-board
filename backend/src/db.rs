@@ -568,6 +568,29 @@ mod tests {
     }
 
     #[test]
+    fn deleting_board_preserves_shared_image_data_on_other_board() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("shared.png");
+        image::RgbImage::new(80, 60)
+            .save_with_format(&source, image::ImageFormat::Png).unwrap();
+        let path = temp.path().join("shared.db");
+        let mut db = Storage::open(&path).unwrap();
+        let first = db.import_image(&source, 1.0, 1.0).unwrap();
+        let first_asset = PathBuf::from(first.asset_path.unwrap());
+        let second = db.create_board().unwrap();
+        assert!(db.select_board(&second.id).unwrap());
+        let image = db.import_image(&source, 5.0, 5.0).unwrap();
+        let second_asset = PathBuf::from(image.asset_path.unwrap());
+        assert_ne!(first_asset, second_asset);
+        assert!(first_asset.exists() && second_asset.exists());
+        assert_eq!(db.delete_board(&second.id).unwrap(), Some("default".to_string()));
+        assert!(first_asset.exists(), "another board's image was deleted");
+        assert!(!second_asset.exists(), "deleted board's asset was not removed");
+        assert_eq!(db.list_notes().unwrap().len(), 1);
+        assert_eq!(db.list_notes().unwrap()[0].id, first.id);
+    }
+
+    #[test]
     fn deleting_inactive_board_preserves_current_selection_and_content() {
         let mut db = mem();
         let another = db.create_board().unwrap();
