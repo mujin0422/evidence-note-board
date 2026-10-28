@@ -110,6 +110,16 @@ impl Storage {
             tx.pragma_update(None, "user_version", 2)?;
             tx.commit()?;
         }
+        // Defense in depth: even direct SQL DELETE statements must not
+        // leave the desktop without a board. No new schema version is needed.
+        conn.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS trg_boards_retain_one
+             BEFORE DELETE ON boards
+             WHEN (SELECT COUNT(*) FROM boards) <= 1
+             BEGIN
+                 SELECT RAISE(ABORT, 'at least one board must remain');
+             END;",
+        )?;
         let active_board_id: String = conn.query_row(
             "SELECT active_board_id FROM board_state WHERE id=1",
             [], |row| row.get(0),
@@ -559,6 +569,11 @@ mod tests {
         assert_eq!(db.active_board_id(), third.id);
         assert_eq!(db.list_boards().unwrap().len(), 1);
         assert_eq!(db.delete_board(&third.id).unwrap(), None);
+        // Invariant also holds for raw SQL, not just our D-Bus application path.
+        assert!(db.conn.execute(
+            "DELETE FROM boards WHERE id=?1", [&third.id],
+        ).is_err());
+        assert_eq!(db.list_boards().unwrap().len(), 1);
         drop(db);
         let reopened = Storage::open(&path).unwrap();
         assert_eq!(reopened.active_board_id(), third.id);
