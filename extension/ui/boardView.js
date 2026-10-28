@@ -340,6 +340,8 @@ export class BoardView {
             if (this._dirtyView)
                 this._persistView();
             await service.flushWrites();
+            if (this._dirtyNotes.size)
+                throw new Error('Unsaved notes prevent switching');
             if (!this._alive || service !== this._service)
                 return;
             await service.selectBoard(id);
@@ -627,7 +629,7 @@ export class BoardView {
             menu.set_height(Math.ceil(naturalHeight));
         this._settingsMenu=menu;
         const [x,y]=this._settingsButton.get_position();
-        const popupHeight=menu.height||naturalHeight||190;
+        const popupHeight=menu.height||naturalHeight||120;
         menu.set_position(
             Math.max(0,Math.min(this._root.width-popupWidth-8,x)),
             Math.max(0,Math.min(this._root.height-popupHeight-8,
