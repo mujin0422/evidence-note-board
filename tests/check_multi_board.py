@@ -32,15 +32,32 @@ rust = (ROOT / "backend/src/db.rs").read_text()
 api = (ROOT / "backend/src/main.rs").read_text()
 service = (ROOT / "extension/services/noteService.js").read_text()
 ui = (ROOT / "extension/ui/boardView.js").read_text()
-for method in ("fn list_boards", "fn create_board", "fn rename_board", "fn select_board"):
+for method in ("fn list_boards", "fn create_board", "fn rename_board", "fn select_board", "fn delete_board"):
     assert method in api, method
 for symbol in ("_switchBoard(id)", "_createBoard()", "_renameBoard(id, entry)",
                "_clearBoardActors()", "_renderNoteBatch(notes, revision)",
                "GLib.idle_add", "await service.flushWrites()", "this._notes.clear()"):
     assert symbol in ui, symbol
-for method in ("ListBoardsAsync", "CreateBoardAsync", "RenameBoardAsync", "SelectBoardAsync"):
+for method in ("ListBoardsAsync", "CreateBoardAsync", "RenameBoardAsync", "SelectBoardAsync", "DeleteBoardAsync"):
     assert method in service, method
 assert "WHERE n.board_id = ?1" in rust
 assert "this._renderNoteBatch(notes, revision)" in ui
 assert "const decodeSize=boundedImageDecodeSize(photoWidth,photoHeight,paintScale)" in ui
+css = (ROOT / "extension/stylesheet.css").read_text()
+assert "if version < 2 {" in rust, "Do not resurrect explicitly deleted legacy board"
+assert "tx.execute(\"DELETE FROM boards WHERE id=?1\"" in rust
+assert "board_count <= 1" in rust
+assert "tx.commit()?;" in rust
+assert "this._confirmDeleteBoard(board)" in ui
+assert "_deleteBoard(id)" in ui
+assert "this._boards.length<=1" in ui
+assert "deleteBoard(id)" in service
+assert "text:'BOARDS'" in ui
+assert "label:'Thêm board'" in ui
+assert "action('+ Tạo board'" not in ui
+assert "document-edit-symbolic" in ui and "user-trash-symbolic" in ui
+assert "nameLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.END)" in ui
+assert "evidence-board-add-button" in css
+assert ".evidence-board-confirm-delete" in css
+assert ".evidence-board-row .evidence-settings-action:first-child" not in css
 print("v0.4.0 multi-board migration and lifecycle checks: OK (static only)")

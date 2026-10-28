@@ -114,6 +114,18 @@ impl NoteApi {
         Ok(())
     }
 
+    /// The backend refuses deleting the only board; SQLite atomically selects
+    /// a replacement and cascades all child records before assets are removed.
+    fn delete_board(&self, id: &str) -> zbus::fdo::Result<String> {
+        if id.len() > 80 || id.is_empty() {
+            return Err(zbus::fdo::Error::InvalidArgs("Invalid board ID".into()));
+        }
+        let active_id = self.with_db(|db| db.delete_board(id))?
+            .ok_or_else(|| zbus::fdo::Error::Failed(
+                "Board not found or cannot delete last board".into()))?;
+        Ok(active_id)
+    }
+
     /// Serialize every saved note for initial UI hydration.
     fn list_notes(&self) -> zbus::fdo::Result<String> {
         let notes = self.with_db(|db| db.list_notes())?;

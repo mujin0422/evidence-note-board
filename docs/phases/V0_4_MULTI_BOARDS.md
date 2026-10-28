@@ -2,13 +2,15 @@
 
 ## User interaction
 Open the existing Settings button (gear) on the desktop. Under **BOARDS**:
-- Click **+ Tạo board** to create and immediately select another board.
+- In the **BOARDS** header, click the compact **Thêm board** button to create and immediately select another board.
 - New boards are named `board #2`, `board #3`, and so on. The pre-upgrade board is retained with its original name and existing notes.
 - Click a board row to show its contents. The filled dot shows which board is active.
-- Click **✎** next to a board, edit its name and click **Lưu**.
+- Click the pencil icon next to a board, edit its name and click **Lưu**.
+- Click the trash icon next to any board to request deletion. Read the confirmation panel, then choose **Xóa board** or **Hủy**. Deletion permanently removes that board's notes, image assets, pins and red strings. The last remaining board cannot be deleted.
+- Deleting the active board automatically selects the oldest remaining board. Deleting an inactive board does not reload the current notes.
 - Settings still contains HUD and red-string visibility controls.
 
-No board is implicitly deleted. Existing notes, images, pins and strings are preserved.
+No board is implicitly deleted. Existing notes, images, pins and strings are preserved unless you explicitly confirm deletion.
 
 ## Data and upgrade
 Existing schema v1 files are upgraded transactionally to schema v2 when the backend starts.
@@ -41,5 +43,6 @@ These tests do not prove actual GNOME 50 Wayland rendering. Manual acceptance on
 1. Upgrade from v0.3.0 with notes, images, strings and a custom camera position.
 2. Confirm all existing content is intact; create board #2, name it, switch both ways.
 3. Confirm different notes, image textures, strings and camera state on each board.
-4. Restart the user service and logout/login: last selected board persists.
-5. Check CPU/RSS with 10, 100 and 500 notes, including image-heavy boards, before and after board switches.
+4. Delete an inactive board and verify the current board remains visible. Delete the active board and confirm the application selects another board; confirm that the last remaining board cannot be deleted.
+5. Restart the user service and logout/login: last selected board persists, and deleted boards do not reappear.
+6. Check CPU/RSS with 10, 100 and 500 notes, including image-heavy boards, before and after board switches.

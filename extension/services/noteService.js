@@ -11,6 +11,9 @@ const XML = `<node>
       <arg type="s" direction="out"/>
     </method>
     <method name="SelectBoard"><arg type="s" direction="in"/></method>
+    <method name="DeleteBoard">
+      <arg type="s" direction="in"/><arg type="s" direction="out"/>
+    </method>
     <method name="ListNotes"><arg type="s" direction="out"/></method>
     <method name="CreateNote">
       <arg type="s" direction="in"/><arg type="s" direction="in"/>
@@ -114,6 +117,13 @@ export class NoteService {
 
     selectBoard(id) {
         return this._enqueue(() => this._proxy.SelectBoardAsync(id));
+    }
+
+    deleteBoard(id) {
+        return this._enqueue(async () => {
+            const [activeId] = await this._proxy.DeleteBoardAsync(id);
+            return activeId;
+        });
     }
 
     // Wait for pending text, geometry and camera saves before switching boards.
