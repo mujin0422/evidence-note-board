@@ -6,7 +6,9 @@ code = (root / "extension/ui/boardView.js").read_text(encoding="utf-8")
 css = (root / "extension/stylesheet.css").read_text(encoding="utf-8")
 rich = (root / "extension/model/richText.js").read_text(encoding="utf-8")
 
-assert "new St.Entry(" not in code, "Removed title editor must not return"
+# v0.4 Settings uses St.Entry for board renaming, never for note titles.
+note_editor = code[code.index("    _renderNote(note, focus = false)") :]
+assert "new St.Entry(" not in note_editor, "Removed note title editor must not return"
 assert "item.title" not in code, "Saving cannot depend on a title field"
 assert "this._service.createNote('', ''," in code
 assert "this._service.updateNote(id, '', content)" in code
