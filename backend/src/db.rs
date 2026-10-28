@@ -1,4 +1,4 @@
-//! SQLite persistence for the single local evidence board.
+//! SQLite persistence for multiple local evidence boards.
 //!
 //! This module owns migrations, note/asset CRUD, camera state and red-string
 //! edges. Callers validate IPC input; this layer maintains database and file
@@ -11,7 +11,16 @@ use std::{fs, io::Write, path::{Path, PathBuf}};
 use uuid::Uuid;
 
 const SCHEMA: &str = include_str!("../../db/migrations/0001_init.sql");
+const MULTI_BOARD_MIGRATION: &str = include_str!("../../db/migrations/0002_multi_boards.sql");
 const BOARD_ID: &str = "default";
+
+/// Lightweight board listing; note contents are fetched for the active board only.
+#[derive(Debug, Clone, Serialize)]
+pub struct Board {
+    pub id: String,
+    pub name: String,
+    pub note_count: i64,
+}
 
 /// Serializable note DTO returned to the GNOME extension.
 #[derive(Debug, Clone, Serialize)]
@@ -53,6 +62,7 @@ pub struct View {
 pub struct Storage {
     conn: Connection,
     assets_dir: PathBuf,
+    active_board_id: String,
 }
 
 impl Storage {
@@ -73,7 +83,7 @@ impl Storage {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         let version: i64 =
             conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version > 1 {
+        if version > 2 {
             return Err(Error::InvalidQuery);
         }
         if version == 0 {
@@ -90,6 +100,16 @@ impl Storage {
             "INSERT OR IGNORE INTO board_view_state (board_id) VALUES (?1)",
             [BOARD_ID],
         )?;
+        if version < 2 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(MULTI_BOARD_MIGRATION)?;
+            tx.pragma_update(None, "user_version", 2)?;
+            tx.commit()?;
+        }
+        let active_board_id: String = conn.query_row(
+            "SELECT active_board_id FROM board_state WHERE id=1",
+            [], |row| row.get(0),
+        )?;
         // An index is safe to add to existing schema-v1 databases and keeps
         // duplicate-image lookup cheap without a destructive migration.
         conn.execute(
@@ -101,11 +121,64 @@ impl Storage {
         conn.execute(
             "INSERT INTO pins (id, note_id, local_x, local_y, style)
              SELECT n.id, n.id, n.width / 2.0, 0, 'red'
-             FROM notes n WHERE n.board_id=?1
-             AND NOT EXISTS (SELECT 1 FROM pins p WHERE p.note_id=n.id)",
-            [BOARD_ID],
+             FROM notes n
+             WHERE NOT EXISTS (SELECT 1 FROM pins p WHERE p.note_id=n.id)",
+            [],
         )?;
-        Ok(Self { conn, assets_dir })
+        Ok(Self { conn, assets_dir, active_board_id })
+    }
+
+    /// Only names and note counts cross the session bus until a board is selected.
+    pub fn list_boards(&self) -> Result<Vec<Board>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT b.id, b.name, COUNT(n.id)
+             FROM boards b LEFT JOIN notes n ON n.board_id=b.id
+             GROUP BY b.id ORDER BY b.created_at, b.rowid",
+        )?;
+        let result = stmt.query_map([], |row| Ok(Board {
+            id: row.get(0)?, name: row.get(1)?, note_count: row.get(2)?,
+        }))?.collect();
+        result
+    }
+
+    pub fn active_board_id(&self) -> &str { &self.active_board_id }
+
+    /// Allocate the monotonically increasing default number in one transaction.
+    pub fn create_board(&mut self) -> Result<Board> {
+        let tx = self.conn.transaction()?;
+        let number: i64 = tx.query_row(
+            "SELECT next_board_number FROM board_state WHERE id=1",
+            [], |row| row.get(0),
+        )?;
+        let id = Uuid::new_v4().to_string();
+        let name = format!("board #{number}");
+        tx.execute("INSERT INTO boards (id, name) VALUES (?1, ?2)",
+            params![id, name])?;
+        tx.execute("INSERT INTO board_view_state (board_id) VALUES (?1)", [&id])?;
+        tx.execute("UPDATE board_state SET next_board_number=?1 WHERE id=1",
+            [number + 1])?;
+        tx.commit()?;
+        Ok(Board {id, name, note_count: 0})
+    }
+
+    pub fn rename_board(&self, id: &str, name: &str) -> Result<Option<Board>> {
+        let changed = self.conn.execute(
+            "UPDATE boards SET name=?1, updated_at=unixepoch() WHERE id=?2",
+            params![name, id],
+        )?;
+        if changed == 0 { return Ok(None); }
+        Ok(self.list_boards()?.into_iter().find(|board| board.id == id))
+    }
+
+    /// Remember selection across backend restarts; old notes never move boards.
+    pub fn select_board(&mut self, id: &str) -> Result<bool> {
+        if !self.conn.query_row("SELECT EXISTS(SELECT 1 FROM boards WHERE id=?1)",
+            [id], |row| row.get::<_, bool>(0))? { return Ok(false); }
+        self.conn.execute(
+            "UPDATE board_state SET active_board_id=?1 WHERE id=1", [id],
+        )?;
+        self.active_board_id = id.to_owned();
+        Ok(true)
     }
 
     /// Convert one joined SQL row into the API-facing note representation.
@@ -140,7 +213,7 @@ impl Storage {
               WHERE n.board_id = ?1
               ORDER BY n.z_index, n.created_at, n.id",
         )?;
-        let notes = stmt.query_map([BOARD_ID], |row| Self::map_note(row, &self.assets_dir))?
+        let notes = stmt.query_map([&self.active_board_id], |row| Self::map_note(row, &self.assets_dir))?
             .collect();
         notes
     }
@@ -153,7 +226,7 @@ impl Storage {
              (id, board_id, type, title, content, x, y, width, height, rotation, color, z_index)
              VALUES (?1, ?2, 'text', ?3, ?4, ?5, ?6, 270, 185, 0, '#E9D898',
                 (SELECT COALESCE(MAX(z_index), 0) + 1 FROM notes WHERE board_id = ?2))",
-            params![id, BOARD_ID, title, content, x, y],
+            params![id, &self.active_board_id, title, content, x, y],
         )?;
         self.conn.execute(
             "INSERT INTO pins (id, note_id, local_x, local_y) VALUES (?1, ?1, 135, 0)",
@@ -171,7 +244,7 @@ impl Storage {
                FROM notes n
                LEFT JOIN assets a ON a.note_id = n.id
               WHERE n.board_id = ?1 AND n.id = ?2",
-            params![BOARD_ID, id],
+            params![&self.active_board_id, id],
             |row| Self::map_note(row, &self.assets_dir),
         ).optional()
     }
@@ -219,7 +292,7 @@ impl Storage {
                  (id, board_id, type, title, content, x, y, width, height, rotation, color, z_index)
                  VALUES (?1, ?2, 'image', '', '', ?3, ?4, ?5, ?6, 0, '#F1E9D2',
                  (SELECT COALESCE(MAX(z_index), 0) + 1 FROM notes WHERE board_id = ?2))",
-                params![id, BOARD_ID, x, y, visual_width, visual_height],
+                params![id, &self.active_board_id, x, y, visual_width, visual_height],
             )?;
             tx.execute(
                 "INSERT INTO pins (id, note_id, local_x, local_y) VALUES (?1, ?1, ?2, 0)",
@@ -245,7 +318,7 @@ impl Storage {
         Ok(self.conn.execute(
             "UPDATE notes SET title = ?1, content = ?2, updated_at = unixepoch()
              WHERE id = ?3 AND board_id = ?4 AND type = 'text'",
-            params![title, content, id, BOARD_ID],
+            params![title, content, id, &self.active_board_id],
         )? == 1)
     }
 
@@ -254,7 +327,7 @@ impl Storage {
         Ok(self.conn.execute(
             "UPDATE notes SET x = ?1, y = ?2, updated_at = unixepoch()
              WHERE id = ?3 AND board_id = ?4",
-            params![x, y, id, BOARD_ID],
+            params![x, y, id, &self.active_board_id],
         )? == 1)
     }
 
@@ -264,7 +337,7 @@ impl Storage {
         Ok(self.conn.execute(
             "UPDATE notes SET width=?1, height=?2, rotation=?3, updated_at=unixepoch()
              WHERE id=?4 AND board_id=?5",
-            params![width, height, rotation, id, BOARD_ID],
+            params![width, height, rotation, id, &self.active_board_id],
         )? == 1)
     }
 
@@ -273,7 +346,7 @@ impl Storage {
         Ok(self.conn.execute(
             "UPDATE notes SET color=?1, updated_at=unixepoch()
              WHERE id=?2 AND board_id=?3 AND type='text'",
-            params![color, id, BOARD_ID],
+            params![color, id, &self.active_board_id],
         )? == 1)
     }
 
@@ -289,7 +362,7 @@ impl Storage {
              JOIN notes nt ON nt.id=t.note_id AND nt.board_id=?1
              ORDER BY c.created_at, c.id",
         )?;
-        let rows = stmt.query_map([BOARD_ID], |row| Ok(ConnectionEdge {
+        let rows = stmt.query_map([&self.active_board_id], |row| Ok(ConnectionEdge {
             id: row.get(0)?,
             source_note_id: row.get(1)?,
             target_note_id: row.get(2)?,
@@ -304,7 +377,7 @@ impl Storage {
             db.query_row(
                 "SELECT p.id FROM pins p JOIN notes n ON n.id=p.note_id
                  WHERE p.note_id=?1 AND n.board_id=?2 ORDER BY p.rowid LIMIT 1",
-                params![note, BOARD_ID], |row| row.get(0))
+                params![note, &self.active_board_id], |row| row.get(0))
         };
         let source_pin = resolve_pin(&self.conn, source)?;
         let target_pin = resolve_pin(&self.conn, target)?;
@@ -338,7 +411,7 @@ impl Storage {
             "DELETE FROM connections WHERE id=?1 AND EXISTS (
                  SELECT 1 FROM pins a JOIN notes n ON n.id=a.note_id
                  WHERE a.id=connections.source_pin_id AND n.board_id=?2)",
-            params![id, BOARD_ID],
+            params![id, &self.active_board_id],
         )? == 1)
     }
 
@@ -347,12 +420,12 @@ impl Storage {
         let asset: Option<String> = self.conn.query_row(
             "SELECT a.file_path FROM assets a JOIN notes n ON n.id=a.note_id
               WHERE n.id=?1 AND n.board_id=?2",
-            params![id, BOARD_ID],
+            params![id, &self.active_board_id],
             |row| row.get(0),
         ).optional()?;
         let removed = self.conn.execute(
             "DELETE FROM notes WHERE id = ?1 AND board_id = ?2",
-            params![id, BOARD_ID],
+            params![id, &self.active_board_id],
         )? == 1;
         if removed {
             if let Some(file_name) = asset {
@@ -370,7 +443,7 @@ impl Storage {
     pub fn load_view(&self) -> Result<View> {
         self.conn.query_row(
             "SELECT zoom, pan_x, pan_y FROM board_view_state WHERE board_id = ?1",
-            [BOARD_ID],
+            [&self.active_board_id],
             |row| Ok(View {
                 zoom: row.get(0)?,
                 pan_x: row.get(1)?,
@@ -383,7 +456,7 @@ impl Storage {
     pub fn save_view(&self, zoom: f64, pan_x: f64, pan_y: f64) -> Result<()> {
         self.conn.execute(
             "UPDATE board_view_state SET zoom = ?1, pan_x = ?2, pan_y = ?3 WHERE board_id = ?4",
-            params![zoom, pan_x, pan_y, BOARD_ID],
+            params![zoom, pan_x, pan_y, &self.active_board_id],
         )?;
         Ok(())
     }
@@ -395,6 +468,41 @@ mod tests {
 
     fn mem() -> Storage {
         Storage::initialize(Connection::open_in_memory().unwrap(), std::env::temp_dir()).unwrap()
+    }
+
+    #[test]
+    fn multiple_boards_isolate_notes_connections_camera_and_persist_selection() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("multi.db");
+        let mut db = Storage::open(&path).unwrap();
+        assert_eq!(db.active_board_id(), "default");
+        let previous = db.create_note("", "original", 1.0, 2.0).unwrap();
+        db.save_view(1.5, 10.0, -20.0).unwrap();
+        let second = db.create_board().unwrap();
+        assert_eq!(second.name, "board #2");
+        assert_eq!(second.note_count, 0);
+        assert!(db.select_board(&second.id).unwrap());
+        assert!(db.list_notes().unwrap().is_empty());
+        assert!(db.list_connections().unwrap().is_empty());
+        assert!(!db.update_note(&previous.id, "", "wrong board").unwrap());
+        assert!(!db.delete_note(&previous.id).unwrap());
+        assert_eq!(db.load_view().unwrap().zoom, 1.0);
+        let note = db.create_note("", "another", 10.0, 20.0).unwrap();
+        assert_eq!(db.list_notes().unwrap().len(), 1);
+        assert_eq!(db.list_notes().unwrap()[0].id, note.id);
+        assert_eq!(db.list_boards().unwrap().len(), 2);
+        assert_eq!(db.list_boards().unwrap()[1].note_count, 1);
+        assert_eq!(db.rename_board(&second.id, "Research").unwrap().unwrap().name, "Research");
+        assert!(!db.select_board("nonexistent").unwrap());
+        drop(db);
+        let mut reopened = Storage::open(&path).unwrap();
+        assert_eq!(reopened.active_board_id(), second.id);
+        assert_eq!(reopened.list_notes().unwrap()[0].id, note.id);
+        let next = reopened.create_board().unwrap();
+        assert_eq!(next.name, "board #3");
+        assert!(reopened.select_board("default").unwrap());
+        assert_eq!(reopened.list_notes().unwrap()[0].id, previous.id);
+        assert_eq!(reopened.load_view().unwrap().zoom, 1.5);
     }
 
     #[test]
@@ -441,7 +549,7 @@ mod tests {
         assert_eq!(db.list_notes().unwrap().len(), 1);
         assert_eq!(db.list_notes().unwrap()[0].id, id);
         let v: i64 = db.conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
-        assert_eq!(v, 1);
+        assert_eq!(v, 2);
     }
     #[test]
     fn import_image_persists_copy_and_cleans_on_delete() {
@@ -610,7 +718,7 @@ mod tests {
             "SELECT count(*) FROM pins", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 1);
         let version: i64 = db.conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 
 }

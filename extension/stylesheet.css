@@ -222,3 +222,25 @@
     border:1px solid #6d5844; border-radius:3px; padding:6px 10px;
 }
 .evidence-settings-action:hover {background-color:#6b4a37;}
+
+/* v0.4.0 — compact, bounded board selector within Settings. */
+.evidence-board-section {
+    color: #f1e9d2;
+    font-weight: bold;
+    padding: 7px 10px 4px;
+}
+.evidence-boards-scroll {
+    padding: 2px;
+}
+.evidence-board-row {
+    spacing: 3px;
+}
+.evidence-board-row .evidence-settings-action:first-child {
+    width: 240px;
+}
+.evidence-board-name-entry {
+    background-color: #f1e9d2;
+    color: #25211c;
+    padding: 5px 7px;
+    width: 214px;
+}

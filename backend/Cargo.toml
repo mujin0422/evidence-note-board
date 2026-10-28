@@ -2,7 +2,7 @@
 # installed into ~/.local/bin by scripts/install-backend-dev.sh.
 [package]
 name = "evidence-note-boardd"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 description = "Local-first SQLite and D-Bus backend for Evidence Note Board"
