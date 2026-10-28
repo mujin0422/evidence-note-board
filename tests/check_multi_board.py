@@ -62,11 +62,27 @@ assert ".evidence-board-confirm-delete" in css
 assert ".evidence-board-row .evidence-settings-action:first-child" not in css
 assert "trg_boards_retain_one" in rust
 assert "at least one board must remain" in rust
-assert "header.set_width(276)" in ui
+assert "header.set_width(304)" in ui
 assert "scroll.set_width(304)" in ui
-assert "list.set_width(296)" in ui
-assert "row.set_width(296)" in ui
+assert "list.set_width(296)" not in ui
+assert "row.set_width(296)" not in ui
+assert "nameButton.set_width(232)" not in ui
+assert "entry.set_width(230)" not in ui
+assert "row.get_width()" in ui
+assert "row.connect('notify::width',fitAvailableWidth)" in ui
+assert "rowWidth-occupied-gaps" in ui
+assert "fixedControls=[editButton,deleteButton]" in ui
+assert "fixedControls=[save]" in ui
+assert "St.PolicyType.NEVER" in ui
+assert "button.set_width(304)" in ui
 assert "evidence-settings-footer-action" in ui
 assert ".evidence-settings-footer-action {" in css
 assert "padding-left: 0;" in css and "padding-right: 0;" in css
+assert "padding: 0 0 3px;" in css
+readme = (ROOT / "README.md").read_text(encoding="utf-8")
+for snippet in ("Ctrl + B", "Ctrl + lăn chuột", "Ctrl + nhấp đúp",
+                "Shift + nhấp vào ghim", "**Esc**",
+                "Thêm board", "Không thể xóa board cuối cùng",
+                "scripts/backup-board.py backup"):
+    assert snippet in readme, snippet
 print("v0.4.0 multi-board migration and lifecycle checks: OK (static only)")
