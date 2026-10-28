@@ -223,6 +223,15 @@
 }
 .evidence-settings-action:hover {background-color:#6b4a37;}
 
+/* Board rows are 296px including their icon controls. The three footer
+ * buttons must use the same outer width: St.Button's default 10px lateral
+ * padding previously made them 20px wider than the rows. */
+.evidence-settings-footer-action {
+    padding-left: 0;
+    padding-right: 0;
+    min-width: 0;
+}
+
 /* v0.4.0 board switcher: explicit width budget prevents clipped icons. */
 .evidence-boards-header {
     spacing: 4px;
