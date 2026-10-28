@@ -300,6 +300,6 @@ mod tests {
         assert!(!PAPER_COLORS.contains(&"#000000"));
         assert_eq!(validate_board_name("  Thư viện  ").unwrap(), "Thư viện");
         assert!(validate_board_name(" ").is_err());
-        assert!(validate_board_name("abc\\nxyz").is_err());
+        assert!(validate_board_name("abc\nxyz").is_err());
     }
 }
