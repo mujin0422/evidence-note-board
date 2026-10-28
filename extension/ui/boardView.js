@@ -607,8 +607,8 @@ export class BoardView {
             orientation:Clutter.Orientation.HORIZONTAL,
             style_class:'evidence-boards-header',
         });
-        // The compact header's edge aligns with the 296px board rows.
-        header.set_width(276);
+        // Header and footer share the popup's content width.
+        header.set_width(304);
         const title=new St.Label({
             text:'BOARDS',style_class:'evidence-board-section',
             y_align:Clutter.ActorAlign.CENTER,
@@ -628,21 +628,23 @@ export class BoardView {
 
         const scroll=new St.ScrollView({
             hscrollbar_policy:St.PolicyType.NEVER,
-            vscrollbar_policy:St.PolicyType.AUTOMATIC,
+            // No invisible scrollbar gutter for a short board list.
+            vscrollbar_policy:this._boards.length>6
+                ? St.PolicyType.AUTOMATIC : St.PolicyType.NEVER,
             style_class:'evidence-boards-scroll',
         });
         scroll.set_width(304);
         const list=new St.BoxLayout({
             orientation:Clutter.Orientation.VERTICAL,
+            x_expand:true,
             style_class:'evidence-boards-list',
         });
-        list.set_width(296);
         for (const board of this._boards) {
             const row=new St.BoxLayout({
                 orientation:Clutter.Orientation.HORIZONTAL,
+                x_expand:true,
                 style_class:'evidence-board-row',
             });
-            row.set_width(296);
             const selected=board.id===this._activeBoardId;
             const nameLabel=new St.Label({
                 text:`${selected?'● ':'○ '}${board.name} (${board.note_count})`,
@@ -653,11 +655,29 @@ export class BoardView {
                 child:nameLabel,can_focus:true,style_class:'evidence-board-name-button',
                 accessible_name:`Chọn board ${board.name}`,
             });
-            nameButton.set_width(232);
+            // The width is calculated from the allocated row, not a hard-coded
+            // name width. Icon widths and CSS spacing are subtracted below.
+            nameButton.set_width(1);
             nameButton.set_height(30);
             nameButton.connect('clicked',()=>this._switchBoard(board.id));
             row.add_child(nameButton);
 
+            let flexibleControl=nameButton;
+            let fixedControls=[];
+            const fitAvailableWidth=()=>{
+                const rowWidth=row.get_width();
+                if (rowWidth<=0 || !flexibleControl)
+                    return;
+                const occupied=fixedControls.reduce(
+                    (total,button)=>total+button.get_width(),0);
+                const gaps=Math.max(0,fixedControls.length)*3;
+                const remaining=Math.max(1,Math.floor(rowWidth-occupied-gaps));
+                if (flexibleControl.get_width()!==remaining)
+                    flexibleControl.set_width(remaining);
+            };
+            // Recalculate when GNOME allocates a different viewport width,
+            // including when a scroll bar appears or scaling changes.
+            row.connect('notify::width',fitAvailableWidth);
             const iconAction=(iconName,label,callback,disabled=false)=>{
                 const button=new St.Button({
                     child:new St.Icon({icon_name:iconName,icon_size:14,
@@ -672,25 +692,33 @@ export class BoardView {
                 if (!disabled)
                     button.connect('clicked',callback);
                 row.add_child(button);
+                return button;
             };
-            iconAction('document-edit-symbolic',`Đổi tên ${board.name}`,()=>{
+            const editButton=iconAction('document-edit-symbolic',`Đổi tên ${board.name}`,()=>{
                 row.destroy_all_children();
                 const entry=new St.Entry({
                     text:board.name,can_focus:true,
                     style_class:'evidence-board-name-entry',
                 });
-                entry.set_width(230);
                 entry.set_height(30);
+                entry.set_width(1);
                 row.add_child(entry);
                 const save=action('Lưu',
                     ()=>this._renameBoard(board.id,entry),row);
                 save.set_width(62);
                 save.set_height(30);
+                flexibleControl=entry;
+                fixedControls=[save];
+                fitAvailableWidth();
                 global.stage.set_key_focus(entry.clutter_text);
             });
-            iconAction('user-trash-symbolic',`Xóa board ${board.name}`,
+            const deleteButton=iconAction('user-trash-symbolic',`Xóa board ${board.name}`,
                 ()=>this._confirmDeleteBoard(board),this._boards.length<=1);
+            fixedControls=[editButton,deleteButton];
+            // Make each row fill its parent, then allocate all remaining space
+            // to the name control (parent - pencil - trash - two gaps).
             list.add_child(row);
+            fitAvailableWidth();
         }
         scroll.set_child(list);
         scroll.set_height(Math.min(224,Math.max(36,this._boards.length*35)));
@@ -701,7 +729,7 @@ export class BoardView {
         const footerAction=(label,callback)=>{
             const button=action(label,callback);
             button.add_style_class_name('evidence-settings-footer-action');
-            button.set_width(296);
+            button.set_width(304);
         };
         footerAction(`HUD: ${this._preferences.show_hud?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,

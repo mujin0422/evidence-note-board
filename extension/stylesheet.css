@@ -223,19 +223,18 @@
 }
 .evidence-settings-action:hover {background-color:#6b4a37;}
 
-/* Board rows are 296px including their icon controls. The three footer
- * buttons must use the same outer width: St.Button's default 10px lateral
- * padding previously made them 20px wider than the rows. */
+/* Header, list viewport and footer use the same 304px content area.
+ * The row name itself is sized from the allocated row width in BoardView. */
 .evidence-settings-footer-action {
     padding-left: 0;
     padding-right: 0;
     min-width: 0;
 }
 
-/* v0.4.0 board switcher: explicit width budget prevents clipped icons. */
+/* v0.4.0 board switcher: flexible names, fixed edit/delete icons. */
 .evidence-boards-header {
     spacing: 4px;
-    padding: 0 2px 3px;
+    padding: 0 0 3px;
 }
 .evidence-board-section {
     color: #f1e9d2;
@@ -259,8 +258,14 @@
     border-color: #ac896b;
 }
 .evidence-boards-scroll { padding: 2px 0; }
-.evidence-boards-list { spacing: 3px; }
-.evidence-board-row { spacing: 3px; }
+.evidence-boards-list {
+    spacing: 3px;
+    min-width: 0;
+}
+.evidence-board-row {
+    spacing: 3px;
+    min-width: 0;
+}
 .evidence-board-name-button,
 .evidence-board-icon-button {
     color: #e9dac1;
@@ -278,6 +283,7 @@
 }
 .evidence-board-name-button StLabel {
     font-size: 12px;
+    min-width: 0;
 }
 .evidence-board-icon-button {
     color: #f0dfc6;
