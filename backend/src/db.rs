@@ -135,9 +135,10 @@ impl Storage {
              FROM boards b LEFT JOIN notes n ON n.board_id=b.id
              GROUP BY b.id ORDER BY b.created_at, b.rowid",
         )?;
-        stmt.query_map([], |row| Ok(Board {
+        let result = stmt.query_map([], |row| Ok(Board {
             id: row.get(0)?, name: row.get(1)?, note_count: row.get(2)?,
-        }))?.collect()
+        }))?.collect();
+        result
     }
 
     pub fn active_board_id(&self) -> &str { &self.active_board_id }
@@ -467,6 +468,41 @@ mod tests {
 
     fn mem() -> Storage {
         Storage::initialize(Connection::open_in_memory().unwrap(), std::env::temp_dir()).unwrap()
+    }
+
+    #[test]
+    fn multiple_boards_isolate_notes_connections_camera_and_persist_selection() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("multi.db");
+        let mut db = Storage::open(&path).unwrap();
+        assert_eq!(db.active_board_id(), "default");
+        let previous = db.create_note("", "original", 1.0, 2.0).unwrap();
+        db.save_view(1.5, 10.0, -20.0).unwrap();
+        let second = db.create_board().unwrap();
+        assert_eq!(second.name, "board #2");
+        assert_eq!(second.note_count, 0);
+        assert!(db.select_board(&second.id).unwrap());
+        assert!(db.list_notes().unwrap().is_empty());
+        assert!(db.list_connections().unwrap().is_empty());
+        assert!(!db.update_note(&previous.id, "", "wrong board").unwrap());
+        assert!(!db.delete_note(&previous.id).unwrap());
+        assert_eq!(db.load_view().unwrap().zoom, 1.0);
+        let note = db.create_note("", "another", 10.0, 20.0).unwrap();
+        assert_eq!(db.list_notes().unwrap().len(), 1);
+        assert_eq!(db.list_notes().unwrap()[0].id, note.id);
+        assert_eq!(db.list_boards().unwrap().len(), 2);
+        assert_eq!(db.list_boards().unwrap()[1].note_count, 1);
+        assert_eq!(db.rename_board(&second.id, "Research").unwrap().unwrap().name, "Research");
+        assert!(!db.select_board("nonexistent").unwrap());
+        drop(db);
+        let mut reopened = Storage::open(&path).unwrap();
+        assert_eq!(reopened.active_board_id(), second.id);
+        assert_eq!(reopened.list_notes().unwrap()[0].id, note.id);
+        let next = reopened.create_board().unwrap();
+        assert_eq!(next.name, "board #3");
+        assert!(reopened.select_board("default").unwrap());
+        assert_eq!(reopened.list_notes().unwrap()[0].id, previous.id);
+        assert_eq!(reopened.load_view().unwrap().zoom, 1.5);
     }
 
     #[test]
