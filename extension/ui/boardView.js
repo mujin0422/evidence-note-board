@@ -567,7 +567,7 @@ export class BoardView {
     }
 
     // Share popover positioning, retaining the compact Settings appearance.
-    _showSettingsPopup(menu, popupWidth=334) {
+    _showSettingsPopup(menu, popupWidth=324) {
         menu.set_width(popupWidth);
         this._root.add_child(menu);
         const [,naturalHeight]=menu.get_preferred_height(popupWidth);
@@ -607,7 +607,8 @@ export class BoardView {
             orientation:Clutter.Orientation.HORIZONTAL,
             style_class:'evidence-boards-header',
         });
-        header.set_width(296);
+        // The compact header's edge aligns with the 296px board rows.
+        header.set_width(276);
         const title=new St.Label({
             text:'BOARDS',style_class:'evidence-board-section',
             y_align:Clutter.ActorAlign.CENTER,
@@ -694,13 +695,21 @@ export class BoardView {
         scroll.set_child(list);
         scroll.set_height(Math.min(224,Math.max(36,this._boards.length*35)));
         menu.add_child(scroll);
-        action(`HUD: ${this._preferences.show_hud?'Hiện':'Ẩn'}`,
+        // St.Button includes horizontal CSS padding in the final allocation.
+        // A zero-horizontal-padding footer keeps its visual edges in sync
+        // with the 296px board rows above it.
+        const footerAction=(label,callback)=>{
+            const button=action(label,callback);
+            button.add_style_class_name('evidence-settings-footer-action');
+            button.set_width(296);
+        };
+        footerAction(`HUD: ${this._preferences.show_hud?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
-                show_hud:!this._preferences.show_hud})).set_width(296);
-        action(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
+                show_hud:!this._preferences.show_hud}));
+        footerAction(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
-                show_strings:!this._preferences.show_strings})).set_width(296);
-        action('Đóng',()=>this._closeSettingsMenu()).set_width(296);
+                show_strings:!this._preferences.show_strings}));
+        footerAction('Đóng',()=>this._closeSettingsMenu());
         this._showSettingsPopup(menu);
     }
 

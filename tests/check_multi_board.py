@@ -60,4 +60,13 @@ assert "nameLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.END)" in ui
 assert "evidence-board-add-button" in css
 assert ".evidence-board-confirm-delete" in css
 assert ".evidence-board-row .evidence-settings-action:first-child" not in css
+assert "trg_boards_retain_one" in rust
+assert "at least one board must remain" in rust
+assert "header.set_width(276)" in ui
+assert "scroll.set_width(304)" in ui
+assert "list.set_width(296)" in ui
+assert "row.set_width(296)" in ui
+assert "evidence-settings-footer-action" in ui
+assert ".evidence-settings-footer-action {" in css
+assert "padding-left: 0;" in css and "padding-right: 0;" in css
 print("v0.4.0 multi-board migration and lifecycle checks: OK (static only)")
