@@ -34,6 +34,16 @@ impl NoteApi {
     }
 }
 
+/// Restrict board names before storing them or sending them to the Shell.
+fn validate_board_name(name: &str) -> zbus::fdo::Result<&str> {
+    let name = name.trim();
+    if name.is_empty() || name.len() > 256 || name.chars().count() > 80 ||
+        name.chars().any(char::is_control) {
+        return Err(zbus::fdo::Error::InvalidArgs("Board name must be 1-80 characters".into()));
+    }
+    Ok(name)
+}
+
 /// Enforce payload limits before text reaches SQLite.
 fn validate_text(title: &str, content: &str) -> zbus::fdo::Result<()> {
     if title.len() > 512 || content.len() > 65536 {
@@ -72,6 +82,38 @@ fn validate_view(zoom: f64, x: f64, y: f64) -> zbus::fdo::Result<()> {
 
 #[interface(name = "io.github.mujin0422.EvidenceNoteBoard", spawn = false)]
 impl NoteApi {
+    /// Small metadata response; does not hydrate notes from inactive boards.
+    fn list_boards(&self) -> zbus::fdo::Result<String> {
+        let (boards, active_board_id) = self.with_db(|db|
+            Ok((db.list_boards()?, db.active_board_id().to_owned())))?;
+        serde_json::to_string(&serde_json::json!({
+            "boards": boards, "active_board_id": active_board_id
+        })).map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn create_board(&self) -> zbus::fdo::Result<String> {
+        let board = self.with_db(|db| db.create_board())?;
+        serde_json::to_string(&board)
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn rename_board(&self, id: &str, name: &str) -> zbus::fdo::Result<String> {
+        if id.len() > 80 { return Err(zbus::fdo::Error::InvalidArgs("Invalid board ID".into())); }
+        let name = validate_board_name(name)?;
+        let board = self.with_db(|db| db.rename_board(id, name))?
+            .ok_or_else(|| zbus::fdo::Error::Failed("Board not found".into()))?;
+        serde_json::to_string(&board)
+            .map_err(|_| zbus::fdo::Error::Failed("Serialization failed".into()))
+    }
+
+    fn select_board(&self, id: &str) -> zbus::fdo::Result<()> {
+        if id.len() > 80 { return Err(zbus::fdo::Error::InvalidArgs("Invalid board ID".into())); }
+        if !self.with_db(|db| db.select_board(id))? {
+            return Err(zbus::fdo::Error::Failed("Board not found".into()));
+        }
+        Ok(())
+    }
+
     /// Serialize every saved note for initial UI hydration.
     fn list_notes(&self) -> zbus::fdo::Result<String> {
         let notes = self.with_db(|db| db.list_notes())?;
@@ -256,5 +298,8 @@ mod tests {
         assert!(validate_geometry(350.0, 310.0, f64::NAN).is_err());
         assert!(PAPER_COLORS.contains(&"#FFFFFF"));
         assert!(!PAPER_COLORS.contains(&"#000000"));
+        assert_eq!(validate_board_name("  Thư viện  ").unwrap(), "Thư viện");
+        assert!(validate_board_name(" ").is_err());
+        assert!(validate_board_name("abc\\nxyz").is_err());
     }
 }
