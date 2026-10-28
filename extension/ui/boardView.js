@@ -47,6 +47,10 @@ export class BoardView {
         this._imagePicker = null;
         this._settingsButton = null;
         this._settingsMenu = null;
+        this._boards = [];
+        this._activeBoardId = null;
+        this._switchingBoard = false;
+        this._loadSource = 0;
         this._preferences = {...DEFAULT_PREFERENCES};
         this._dirtyNotes = new Set();
         this._dirtyView = false;
@@ -207,12 +211,18 @@ export class BoardView {
     async _connectBackend() {
         const revision = ++this._connectionRevision;
         const service = await NoteService.connect();
+        // Read the active-board selector before hydrating only its note data.
+        const boardState = await service.listBoards();
         const [notes, view, connections, settings] = await Promise.all([
-            service.listNotes(),service.getView(),service.listConnections(),service.getSettings(),
+            service.listNotes(), service.getView(), service.listConnections(), service.getSettings(),
         ]);
         // A backend restart or extension disable invalidates in-flight RPCs.
         if (!this._alive || revision !== this._connectionRevision)
             return;
+        if (this._activeBoardId !== boardState.active_board_id)
+            this._clearBoardActors();
+        this._activeBoardId = boardState.active_board_id;
+        this._boards = boardState.boards;
         this._service = service;
         if (this._reconnectTimer) {
             GLib.Source.remove(this._reconnectTimer);
@@ -235,25 +245,149 @@ export class BoardView {
         if (view.pan_x!==this._view.panX ||
             view.pan_y!==this._view.panY || view.zoom!==this._view.zoom)
             this._scheduleView();
-        let restored = 0;
-        let failed = 0;
-        for (const note of notes) {
-            try {
-                this._renderNote(note);
-                restored++;
-            } catch (error) {
-                failed++;
-                console.error(error, 'Evidence Note Board: failed to render saved note');
-            }
-        }
+        // A bounded batch per idle frame avoids a large synchronous actor spike.
+        // Notes belonging to inactive boards are never requested or instantiated.
+        this._renderNoteBatch(notes, revision);
         for (const id of [...this._dirtyNotes])
             this._flushNote(id);
         if (this._dirtyView)
             this._scheduleView();
-        if (failed)
-            this._setStatus(`LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`);
-        else
-            this._setStatus(`SẴN SÀNG · ${restored} ghi chú · double-click: note · Ctrl+double-click: ảnh`);
+    }
+
+    // Release every Shell actor, image texture reference and stale callback.
+    // The SQLite rows and image files are retained unmodified.
+    _clearBoardActors() {
+        if (this._loadSource) {
+            GLib.Source.remove(this._loadSource);
+            this._loadSource = 0;
+        }
+        this._stopCaretBlink();
+        this._endBoardPan();
+        this._cancelTextHold();
+        this._cancelString();
+        this._closeNoteMenu();
+        this._closePinMenu();
+        this._endDrag();
+        global.stage.set_key_focus(null);
+        for (const id of [...this._timers.keys()])
+            this._cancelNoteTimer(id);
+        if (this._viewTimer) {
+            GLib.Source.remove(this._viewTimer);
+            this._viewTimer = 0;
+        }
+        for (const item of this._notes.values()) {
+            item.pin?.destroy();
+            item.actor.destroy();
+        }
+        this._notes.clear();
+        this._bodyNotes = new WeakMap();
+        this._focusedBody = null;
+        this._connections.clear();
+        this._deletingNotes.clear();
+        this._dirtyNotes.clear();
+        this._dirtyView = false;
+        this._doubleClick.reset();
+        this._queueStrings(true);
+    }
+
+    _renderNoteBatch(notes, revision) {
+        if (this._loadSource) {
+            GLib.Source.remove(this._loadSource);
+            this._loadSource = 0;
+        }
+        let index = 0, failed = 0;
+        this._setStatus(`ĐANG TẢI ${notes.length} GHI CHÚ`);
+        this._loadSource = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            if (!this._alive || revision !== this._connectionRevision) {
+                this._loadSource = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            const until = Math.min(index + 8, notes.length);
+            for (; index < until; index++) {
+                try {
+                    this._renderNote(notes[index]);
+                } catch (error) {
+                    failed++;
+                    console.error(error, 'Evidence Note Board: failed to render saved note');
+                }
+            }
+            this._queueStrings();
+            if (index < notes.length)
+                return GLib.SOURCE_CONTINUE;
+            this._loadSource = 0;
+            this._setStatus(failed
+                ? `LỖI HIỂN THỊ ${failed} GHI CHÚ · xem journalctl`
+                : `SẴN SÀNG · ${notes.length} ghi chú · double-click: note`);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // Flush pending notes/camera before the selected board changes in SQLite.
+    async _switchBoard(id) {
+        if (!this._service || this._switchingBoard || id === this._activeBoardId)
+            return;
+        this._switchingBoard = true;
+        this._closeSettingsMenu();
+        const service = this._service;
+        try {
+            global.stage.set_key_focus(null);
+            for (const noteId of [...this._dirtyNotes])
+                this._flushNote(noteId);
+            if (this._viewTimer) {
+                GLib.Source.remove(this._viewTimer);
+                this._viewTimer = 0;
+            }
+            if (this._dirtyView)
+                this._persistView();
+            await service.flushWrites();
+            if (!this._alive || service !== this._service)
+                return;
+            await service.selectBoard(id);
+            if (!this._alive)
+                return;
+            // Invalidate any earlier connection/hydration callback.
+            this._connectionRevision++;
+            this._clearBoardActors();
+            this._activeBoardId = null;
+            this._setStatus('ĐANG CHUYỂN BOARD…');
+            await this._connectBackend();
+        } catch (error) {
+            console.warn('Evidence Note Board: board switch failed', error.message);
+            if (this._alive)
+                this._setStatus('LỖI CHUYỂN BOARD · thử lại trong Settings');
+        } finally {
+            this._switchingBoard = false;
+        }
+    }
+
+    async _createBoard() {
+        if (!this._service || this._switchingBoard)
+            return;
+        try {
+            const board = await this._service.createBoard();
+            if (!this._alive)
+                return;
+            await this._switchBoard(board.id);
+        } catch (error) {
+            console.warn('Evidence Note Board: create board failed', error.message);
+            this._saveError();
+        }
+    }
+
+    async _renameBoard(id, entry) {
+        if (!this._service || this._switchingBoard)
+            return;
+        try {
+            const board = await this._service.renameBoard(id, entry.get_text());
+            if (!this._alive)
+                return;
+            this._boards = this._boards.map(old => old.id === id ? board : old);
+            this._closeSettingsMenu();
+            this._setStatus(`ĐÃ ĐỔI TÊN · ${board.name}`);
+        } catch (error) {
+            console.warn('Evidence Note Board: rename board failed', error.message);
+            this._setStatus('TÊN BOARD KHÔNG HỢP LỆ');
+        }
     }
 
     // Retry a lost backend connection using bounded exponential backoff.
@@ -430,7 +564,7 @@ export class BoardView {
         this._noteMenu=menu;
     }
 
-    // Create or close the compact settings popover.
+    // The Settings popover is the sole board creation / selection interface.
     _toggleSettingsMenu() {
         if (this._settingsMenu) {
             this._closeSettingsMenu();
@@ -442,13 +576,42 @@ export class BoardView {
             reactive:true,orientation:Clutter.Orientation.VERTICAL,
             style_class:'evidence-settings-menu',
         });
-        const action=(label,callback)=>{
+        const action=(label,callback,parent=menu)=>{
             const button=new St.Button({
                 label,can_focus:true,style_class:'evidence-settings-action',
             });
             button.connect('clicked',callback);
-            menu.add_child(button);
+            parent.add_child(button);
+            return button;
         };
+        const title=new St.Label({text:'BOARDS',style_class:'evidence-board-section'});
+        menu.add_child(title);
+        const scroll=new St.ScrollView({
+            hscrollbar_policy:St.PolicyType.NEVER,
+            vscrollbar_policy:St.PolicyType.AUTOMATIC,
+            style_class:'evidence-boards-scroll',
+        });
+        const list=new St.BoxLayout({orientation:Clutter.Orientation.VERTICAL});
+        for (const board of this._boards) {
+            const row=new St.BoxLayout({orientation:Clutter.Orientation.HORIZONTAL,
+                style_class:'evidence-board-row'});
+            const selected=board.id===this._activeBoardId;
+            action(`${selected?'● ':'○ '}${board.name} (${board.note_count})`,
+                ()=>this._switchBoard(board.id),row);
+            action('✎',()=>{
+                row.destroy_all_children();
+                const entry=new St.Entry({text:board.name,can_focus:true,
+                    style_class:'evidence-board-name-entry'});
+                row.add_child(entry);
+                action('Lưu',()=>this._renameBoard(board.id,entry),row);
+                global.stage.set_key_focus(entry.clutter_text);
+            },row);
+            list.add_child(row);
+        }
+        scroll.set_child(list);
+        scroll.set_height(Math.min(224,Math.max(36,this._boards.length*39)));
+        menu.add_child(scroll);
+        action('+ Tạo board',()=>this._createBoard());
         action(`HUD: ${this._preferences.show_hud?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
                 show_hud:!this._preferences.show_hud}));
@@ -456,9 +619,7 @@ export class BoardView {
             ()=>this._savePreferences({...this._preferences,
                 show_strings:!this._preferences.show_strings}));
         action('Đóng',()=>this._closeSettingsMenu());
-        // Only three actions remain. Derive height from child allocation
-        // rather than keeping the old 198px rectangle and blank bottom.
-        const popupWidth=208;
+        const popupWidth=310;
         menu.set_width(popupWidth);
         this._root.add_child(menu);
         const [,naturalHeight]=menu.get_preferred_height(popupWidth);
@@ -466,7 +627,7 @@ export class BoardView {
             menu.set_height(Math.ceil(naturalHeight));
         this._settingsMenu=menu;
         const [x,y]=this._settingsButton.get_position();
-        const popupHeight=menu.height||naturalHeight||120;
+        const popupHeight=menu.height||naturalHeight||190;
         menu.set_position(
             Math.max(0,Math.min(this._root.width-popupWidth-8,x)),
             Math.max(0,Math.min(this._root.height-popupHeight-8,
@@ -492,7 +653,8 @@ export class BoardView {
 
     // Render a status message together with the current zoom percentage.
     _setStatus(message) {
-        const text=`EVIDENCE BOARD · ${message} · ${Math.round(this._view.zoom * 100)}%`;
+        const board=this._boards.find(b=>b.id===this._activeBoardId)?.name ?? 'BOARD';
+        const text=`${board.slice(0,28)} · ${message} · ${Math.round(this._view.zoom * 100)}%`;
         // Pan motion can run at the display refresh rate. Avoid relayout and
         // notify::width/height emissions when the visible label is unchanged.
         if (text===this._statusText)
@@ -1930,6 +2092,10 @@ export class BoardView {
             GLib.Source.remove(this._reconnectTimer);
         this._reconnectTimer=0;
         this._closeSettingsMenu();
+        if (this._loadSource) {
+            GLib.Source.remove(this._loadSource);
+            this._loadSource = 0;
+        }
         this._stringsLayer = null;
         this._alive = false;
         this._connectionRevision++;
