@@ -1,7 +1,7 @@
 %global uuid evidence-note-board@mujin0422.github.io
 
 Name:           evidence-note-board
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Local-first evidence board for GNOME Shell
 
@@ -89,6 +89,10 @@ bash -n scripts/*.sh
 %{_datadir}/gnome-shell/extensions/%{uuid}/
 
 %changelog
+* Wed Oct 28 2026 mujin0422 - 0.4.0-1
+- Add persistent multi-board selection, creation and renaming in Settings
+- Load only active-board notes using bounded idle batches
+
 * Tue Oct 27 2026 mujin0422 - 0.3.0-1
 - Add paper colors and reversible dark-red text formatting
 - Add inline single-character CEFR badges
