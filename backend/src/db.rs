@@ -206,8 +206,8 @@ impl Storage {
                 "SELECT a.file_path FROM assets a
                  JOIN notes n ON n.id=a.note_id WHERE n.board_id=?1",
             )?;
-            stmt.query_map([id], |row| row.get(0))?
-                .collect::<Result<Vec<_>>>()?
+            let rows = stmt.query_map([id], |row| row.get(0))?;
+            rows.collect::<Result<Vec<_>>>()?
         };
         let next_active = if self.active_board_id == id {
             let replacement: String = tx.query_row(
