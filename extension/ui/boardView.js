@@ -566,7 +566,24 @@ export class BoardView {
         this._noteMenu=menu;
     }
 
-    // The Settings popover is the sole board creation / selection interface.
+    // Share popover positioning, retaining the compact Settings appearance.
+    _showSettingsPopup(menu, popupWidth=334) {
+        menu.set_width(popupWidth);
+        this._root.add_child(menu);
+        const [,naturalHeight]=menu.get_preferred_height(popupWidth);
+        if (naturalHeight>0)
+            menu.set_height(Math.ceil(naturalHeight));
+        this._settingsMenu=menu;
+        const [x,y]=this._settingsButton.get_position();
+        const popupHeight=menu.height||naturalHeight||120;
+        menu.set_position(
+            Math.max(0,Math.min(this._root.width-popupWidth-8,x)),
+            Math.max(0,Math.min(this._root.height-popupHeight-8,
+                y+this._settingsButton.height+5)));
+    }
+
+    // Edit and delete are fixed-width icon buttons; the name is ellipsized,
+    // not allowed to expand behind the scroll bar or be clipped as before.
     _toggleSettingsMenu() {
         if (this._settingsMenu) {
             this._closeSettingsMenu();
@@ -586,54 +603,202 @@ export class BoardView {
             parent.add_child(button);
             return button;
         };
-        const title=new St.Label({text:'BOARDS',style_class:'evidence-board-section'});
-        menu.add_child(title);
+        const header=new St.BoxLayout({
+            orientation:Clutter.Orientation.HORIZONTAL,
+            style_class:'evidence-boards-header',
+        });
+        header.set_width(296);
+        const title=new St.Label({
+            text:'BOARDS',style_class:'evidence-board-section',
+            y_align:Clutter.ActorAlign.CENTER,
+        });
+        title.set_height(26);
+        header.add_child(title);
+        header.add_child(new St.Widget({x_expand:true}));
+        const addButton=new St.Button({
+            label:'Thêm board',can_focus:true,
+            style_class:'evidence-board-add-button',
+            y_align:Clutter.ActorAlign.CENTER,
+        });
+        addButton.set_height(26);
+        addButton.connect('clicked',()=>this._createBoard());
+        header.add_child(addButton);
+        menu.add_child(header);
+
         const scroll=new St.ScrollView({
             hscrollbar_policy:St.PolicyType.NEVER,
             vscrollbar_policy:St.PolicyType.AUTOMATIC,
             style_class:'evidence-boards-scroll',
         });
-        const list=new St.BoxLayout({orientation:Clutter.Orientation.VERTICAL});
+        scroll.set_width(304);
+        const list=new St.BoxLayout({
+            orientation:Clutter.Orientation.VERTICAL,
+            style_class:'evidence-boards-list',
+        });
+        list.set_width(296);
         for (const board of this._boards) {
-            const row=new St.BoxLayout({orientation:Clutter.Orientation.HORIZONTAL,
-                style_class:'evidence-board-row'});
+            const row=new St.BoxLayout({
+                orientation:Clutter.Orientation.HORIZONTAL,
+                style_class:'evidence-board-row',
+            });
+            row.set_width(296);
             const selected=board.id===this._activeBoardId;
-            action(`${selected?'● ':'○ '}${board.name} (${board.note_count})`,
-                ()=>this._switchBoard(board.id),row);
-            action('✎',()=>{
+            const nameLabel=new St.Label({
+                text:`${selected?'● ':'○ '}${board.name} (${board.note_count})`,
+                y_align:Clutter.ActorAlign.CENTER,
+            });
+            nameLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+            const nameButton=new St.Button({
+                child:nameLabel,can_focus:true,style_class:'evidence-board-name-button',
+                accessible_name:`Chọn board ${board.name}`,
+            });
+            nameButton.set_width(232);
+            nameButton.set_height(30);
+            nameButton.connect('clicked',()=>this._switchBoard(board.id));
+            row.add_child(nameButton);
+
+            const iconAction=(iconName,label,callback,disabled=false)=>{
+                const button=new St.Button({
+                    child:new St.Icon({icon_name:iconName,icon_size:14,
+                        style_class:'evidence-board-action-icon'}),
+                    can_focus:!disabled,reactive:!disabled,
+                    style_class:disabled
+                        ? 'evidence-board-icon-button evidence-board-icon-disabled'
+                        : 'evidence-board-icon-button',
+                    accessible_name:label,
+                });
+                button.set_size(28,30);
+                if (!disabled)
+                    button.connect('clicked',callback);
+                row.add_child(button);
+            };
+            iconAction('document-edit-symbolic',`Đổi tên ${board.name}`,()=>{
                 row.destroy_all_children();
-                const entry=new St.Entry({text:board.name,can_focus:true,
-                    style_class:'evidence-board-name-entry'});
+                const entry=new St.Entry({
+                    text:board.name,can_focus:true,
+                    style_class:'evidence-board-name-entry',
+                });
+                entry.set_width(230);
+                entry.set_height(30);
                 row.add_child(entry);
-                action('Lưu',()=>this._renameBoard(board.id,entry),row);
+                const save=action('Lưu',
+                    ()=>this._renameBoard(board.id,entry),row);
+                save.set_width(62);
+                save.set_height(30);
                 global.stage.set_key_focus(entry.clutter_text);
-            },row);
+            });
+            iconAction('user-trash-symbolic',`Xóa board ${board.name}`,
+                ()=>this._confirmDeleteBoard(board),this._boards.length<=1);
             list.add_child(row);
         }
         scroll.set_child(list);
-        scroll.set_height(Math.min(224,Math.max(36,this._boards.length*39)));
+        scroll.set_height(Math.min(224,Math.max(36,this._boards.length*35)));
         menu.add_child(scroll);
-        action('+ Tạo board',()=>this._createBoard());
         action(`HUD: ${this._preferences.show_hud?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
-                show_hud:!this._preferences.show_hud}));
+                show_hud:!this._preferences.show_hud})).set_width(296);
         action(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
-                show_strings:!this._preferences.show_strings}));
-        action('Đóng',()=>this._closeSettingsMenu());
-        const popupWidth=310;
-        menu.set_width(popupWidth);
-        this._root.add_child(menu);
-        const [,naturalHeight]=menu.get_preferred_height(popupWidth);
-        if (naturalHeight>0)
-            menu.set_height(Math.ceil(naturalHeight));
-        this._settingsMenu=menu;
-        const [x,y]=this._settingsButton.get_position();
-        const popupHeight=menu.height||naturalHeight||120;
-        menu.set_position(
-            Math.max(0,Math.min(this._root.width-popupWidth-8,x)),
-            Math.max(0,Math.min(this._root.height-popupHeight-8,
-                y+this._settingsButton.height+5)));
+                show_strings:!this._preferences.show_strings})).set_width(296);
+        action('Đóng',()=>this._closeSettingsMenu()).set_width(296);
+        this._showSettingsPopup(menu);
+    }
+
+    // Explicit confirmation is required before cascading any stored notes.
+    _confirmDeleteBoard(board) {
+        if (!this._service || this._switchingBoard || this._boards.length<=1)
+            return;
+        this._closeSettingsMenu();
+        const menu=new St.BoxLayout({
+            reactive:true,orientation:Clutter.Orientation.VERTICAL,
+            style_class:'evidence-settings-menu evidence-board-confirm-menu',
+        });
+        const title=new St.Label({
+            text:`Xóa board "${board.name}"?`,
+            style_class:'evidence-board-confirm-title',
+        });
+        title.set_width(296);
+        title.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+        menu.add_child(title);
+        const detail=new St.Label({
+            text:`Xóa vĩnh viễn ${board.note_count} ghi chú, ảnh và dây đỏ của board này.`,
+            style_class:'evidence-board-confirm-detail',
+        });
+        detail.set_width(296);
+        detail.clutter_text.set_line_wrap(true);
+        menu.add_child(detail);
+        const actions=new St.BoxLayout({
+            orientation:Clutter.Orientation.HORIZONTAL,
+            style_class:'evidence-board-confirm-actions',
+        });
+        const deleteButton=new St.Button({
+            label:'Xóa board',can_focus:true,
+            style_class:'evidence-board-confirm-delete',
+        });
+        deleteButton.set_width(144);
+        deleteButton.connect('clicked',()=>this._deleteBoard(board.id));
+        actions.add_child(deleteButton);
+        const cancelButton=new St.Button({
+            label:'Hủy',can_focus:true,
+            style_class:'evidence-settings-action',
+        });
+        cancelButton.set_width(144);
+        cancelButton.connect('clicked',()=>{
+            this._closeSettingsMenu();
+            this._toggleSettingsMenu();
+        });
+        actions.add_child(cancelButton);
+        menu.add_child(actions);
+        this._showSettingsPopup(menu);
+    }
+
+    // Save pending edits before a destructive operation, then refresh metadata
+    // without rebuilding notes if the deleted board was not active.
+    async _deleteBoard(id) {
+        if (!this._service || this._switchingBoard || this._boards.length<=1)
+            return;
+        this._switchingBoard=true;
+        this._closeSettingsMenu();
+        const service=this._service;
+        const wasActive=id===this._activeBoardId;
+        try {
+            global.stage.set_key_focus(null);
+            for (const noteId of [...this._dirtyNotes])
+                this._flushNote(noteId);
+            if (this._viewTimer) {
+                GLib.Source.remove(this._viewTimer);
+                this._viewTimer=0;
+            }
+            if (this._dirtyView)
+                this._persistView();
+            await service.flushWrites();
+            if (this._dirtyNotes.size)
+                throw new Error('Unsaved note edits prevent board deletion');
+            if (!this._alive || service!==this._service)
+                return;
+            const activeId=await service.deleteBoard(id);
+            if (!this._alive || service!==this._service)
+                return;
+            if (wasActive) {
+                this._connectionRevision++;
+                this._clearBoardActors();
+                this._activeBoardId=null;
+                await this._connectBackend();
+            } else {
+                const boards=await service.listBoards();
+                if (!this._alive || service!==this._service)
+                    return;
+                this._activeBoardId=activeId;
+                this._boards=boards.boards;
+                this._setStatus('ĐÃ XÓA BOARD');
+            }
+        } catch (error) {
+            console.warn('Evidence Note Board: delete board failed',error.message);
+            if (this._alive)
+                this._setStatus('LỖI XÓA BOARD · kiểm tra dữ liệu và thử lại');
+        } finally {
+            this._switchingBoard=false;
+        }
     }
 
     // Keep the settings button aligned immediately left of the HUD.
