@@ -92,14 +92,18 @@ impl Storage {
             tx.pragma_update(None, "user_version", 1)?;
             tx.commit()?;
         }
-        conn.execute(
-            "INSERT OR IGNORE INTO boards (id, name) VALUES (?1, ?2)",
-            params![BOARD_ID, "Evidence Board"],
-        )?;
-        conn.execute(
-            "INSERT OR IGNORE INTO board_view_state (board_id) VALUES (?1)",
-            [BOARD_ID],
-        )?;
+        // Only create the legacy board during initial/v1 upgrades. Recreating
+        // it on every v2 restart would undo a deliberate user deletion.
+        if version < 2 {
+            conn.execute(
+                "INSERT OR IGNORE INTO boards (id, name) VALUES (?1, ?2)",
+                params![BOARD_ID, "Evidence Board"],
+            )?;
+            conn.execute(
+                "INSERT OR IGNORE INTO board_view_state (board_id) VALUES (?1)",
+                [BOARD_ID],
+            )?;
+        }
         if version < 2 {
             let tx = conn.transaction()?;
             tx.execute_batch(MULTI_BOARD_MIGRATION)?;
@@ -179,6 +183,59 @@ impl Storage {
         )?;
         self.active_board_id = id.to_owned();
         Ok(true)
+    }
+
+    /// Permanently remove a board and its cascaded notes, pins and edges.
+    /// The selected board is replaced transactionally if it is deleted.
+    /// Return None when the board does not exist or is the final board.
+    pub fn delete_board(&mut self, id: &str) -> Result<Option<String>> {
+        let tx = self.conn.transaction()?;
+        let board_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM boards", [], |row| row.get(0),
+        )?;
+        if board_count <= 1 { return Ok(None); }
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM boards WHERE id=?1)", [id],
+            |row| row.get(0),
+        )?;
+        if !exists { return Ok(None); }
+        // Keep the managed filenames before CASCADE removes their rows.
+        // Each asset has a unique path even when imports share disk blocks.
+        let assets: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT a.file_path FROM assets a
+                 JOIN notes n ON n.id=a.note_id WHERE n.board_id=?1",
+            )?;
+            stmt.query_map([id], |row| row.get(0))?
+                .collect::<Result<Vec<_>>>()?
+        };
+        let next_active = if self.active_board_id == id {
+            let replacement: String = tx.query_row(
+                "SELECT id FROM boards WHERE id<>?1
+                 ORDER BY created_at, rowid LIMIT 1",
+                [id], |row| row.get(0),
+            )?;
+            tx.execute(
+                "UPDATE board_state SET active_board_id=?1 WHERE id=1",
+                [&replacement],
+            )?;
+            replacement
+        } else {
+            self.active_board_id.clone()
+        };
+        tx.execute("DELETE FROM boards WHERE id=?1", [id])?;
+        tx.commit()?;
+        self.active_board_id = next_active.clone();
+        // Never delete files until the SQLite transaction has committed.
+        for name in assets {
+            let path = self.assets_dir.join(name);
+            if let Err(error) = fs::remove_file(&path) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("Evidence Note Board: orphaned deleted-board asset: {error}");
+                }
+            }
+        }
+        Ok(Some(next_active))
     }
 
     /// Convert one joined SQL row into the API-facing note representation.
@@ -468,6 +525,56 @@ mod tests {
 
     fn mem() -> Storage {
         Storage::initialize(Connection::open_in_memory().unwrap(), std::env::temp_dir()).unwrap()
+    }
+
+    #[test]
+    fn delete_board_cascades_and_does_not_resurrect_default_on_reopen() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("delete.db");
+        let image_path = temp.path().join("photo.png");
+        image::RgbImage::new(48, 36)
+            .save_with_format(&image_path, image::ImageFormat::Png).unwrap();
+        let mut db = Storage::open(&path).unwrap();
+        assert_eq!(db.delete_board("default").unwrap(), None);
+        let legacy_note = db.create_note("", "legacy", 3.0, 4.0).unwrap();
+        let second = db.create_board().unwrap();
+        let third = db.create_board().unwrap();
+        assert!(db.select_board(&second.id).unwrap());
+        let first = db.create_note("", "linked one", 2.0, 3.0).unwrap();
+        let other = db.create_note("", "linked two", 4.0, 5.0).unwrap();
+        let photo = db.import_image(&image_path, 6.0, 7.0).unwrap();
+        let managed = PathBuf::from(photo.asset_path.unwrap());
+        assert!(managed.is_file());
+        db.create_connection(&first.id, &other.id).unwrap();
+        assert_eq!(db.list_connections().unwrap().len(), 1);
+        assert_eq!(db.delete_board(&second.id).unwrap(), Some("default".to_string()));
+        assert!(!managed.exists());
+        assert_eq!(db.active_board_id(), "default");
+        assert_eq!(db.list_notes().unwrap().len(), 1);
+        assert_eq!(db.list_notes().unwrap()[0].id, legacy_note.id);
+        assert!(db.list_connections().unwrap().is_empty());
+        assert_eq!(db.list_boards().unwrap().len(), 2);
+        assert_eq!(db.delete_board("missing").unwrap(), None);
+        assert_eq!(db.delete_board("default").unwrap(), Some(third.id.clone()));
+        assert_eq!(db.active_board_id(), third.id);
+        assert_eq!(db.list_boards().unwrap().len(), 1);
+        assert_eq!(db.delete_board(&third.id).unwrap(), None);
+        drop(db);
+        let reopened = Storage::open(&path).unwrap();
+        assert_eq!(reopened.active_board_id(), third.id);
+        assert_eq!(reopened.list_boards().unwrap().len(), 1);
+        assert_eq!(reopened.list_notes().unwrap().len(), 0);
+        assert!(!reopened.list_boards().unwrap().iter().any(|b| b.id=="default"));
+    }
+
+    #[test]
+    fn deleting_inactive_board_preserves_current_selection_and_content() {
+        let mut db = mem();
+        let another = db.create_board().unwrap();
+        let selected = db.create_note("", "keep", 0.0, 1.0).unwrap();
+        assert_eq!(db.delete_board(&another.id).unwrap(), Some("default".to_string()));
+        assert_eq!(db.list_notes().unwrap()[0].id, selected.id);
+        assert_eq!(db.delete_board("default").unwrap(), None);
     }
 
     #[test]
