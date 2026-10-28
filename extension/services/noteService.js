@@ -4,6 +4,13 @@ import Gio from 'gi://Gio';
 
 const XML = `<node>
   <interface name="io.github.mujin0422.EvidenceNoteBoard">
+    <method name="ListBoards"><arg type="s" direction="out"/></method>
+    <method name="CreateBoard"><arg type="s" direction="out"/></method>
+    <method name="RenameBoard">
+      <arg type="s" direction="in"/><arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="SelectBoard"><arg type="s" direction="in"/></method>
     <method name="ListNotes"><arg type="s" direction="out"/></method>
     <method name="CreateNote">
       <arg type="s" direction="in"/><arg type="s" direction="in"/>
@@ -84,8 +91,37 @@ export class NoteService {
         return call;
     }
 
+    // Board metadata is lightweight; only the active board's note payloads are fetched.
+    async listBoards() {
+        await this._tail;
+        const [payload] = await this._proxy.ListBoardsAsync();
+        return JSON.parse(payload);
+    }
+
+    createBoard() {
+        return this._enqueue(async () => {
+            const [payload] = await this._proxy.CreateBoardAsync();
+            return JSON.parse(payload);
+        });
+    }
+
+    renameBoard(id, name) {
+        return this._enqueue(async () => {
+            const [payload] = await this._proxy.RenameBoardAsync(id, name);
+            return JSON.parse(payload);
+        });
+    }
+
+    selectBoard(id) {
+        return this._enqueue(() => this._proxy.SelectBoardAsync(id));
+    }
+
+    // Wait for pending text, geometry and camera saves before switching boards.
+    flushWrites() { return this._tail; }
+
     // Fetch and decode all notes.
     async listNotes() {
+        await this._tail;
         const [payload] = await this._proxy.ListNotesAsync();
         return JSON.parse(payload);
     }
@@ -104,6 +140,7 @@ export class NoteService {
 
     // Fetch and decode the persisted camera.
     async getView() {
+        await this._tail;
         const [payload] = await this._proxy.GetViewAsync();
         return JSON.parse(payload);
     }
@@ -147,6 +184,7 @@ export class NoteService {
 
     // Fetch and decode all red-string edges.
     async listConnections() {
+        await this._tail;
         const [payload] = await this._proxy.ListConnectionsAsync();
         return JSON.parse(payload);
     }
