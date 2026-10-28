@@ -223,24 +223,85 @@
 }
 .evidence-settings-action:hover {background-color:#6b4a37;}
 
-/* v0.4.0 — compact, bounded board selector within Settings. */
+/* v0.4.0 board switcher: explicit width budget prevents clipped icons. */
+.evidence-boards-header {
+    spacing: 4px;
+    padding: 0 2px 3px;
+}
 .evidence-board-section {
     color: #f1e9d2;
     font-weight: bold;
-    padding: 7px 10px 4px;
+    font-size: 12px;
+    padding: 0;
 }
-.evidence-boards-scroll {
-    padding: 2px;
+.evidence-board-add-button {
+    color: #e9dac1;
+    background-color: #49392f;
+    border: 1px solid #6d5844;
+    border-radius: 3px;
+    font-size: 10px;
+    padding: 0 7px;
+    min-width: 0;
+    min-height: 0;
 }
-.evidence-board-row {
-    spacing: 3px;
+.evidence-board-add-button:hover,
+.evidence-board-add-button:focus {
+    background-color: #6b4a37;
+    border-color: #ac896b;
 }
-.evidence-board-row .evidence-settings-action:first-child {
-    width: 240px;
+.evidence-boards-scroll { padding: 2px 0; }
+.evidence-boards-list { spacing: 3px; }
+.evidence-board-row { spacing: 3px; }
+.evidence-board-name-button,
+.evidence-board-icon-button {
+    color: #e9dac1;
+    background-color: #49392f;
+    border: 1px solid #6d5844;
+    border-radius: 3px;
+    padding: 0;
+    min-width: 0;
+    min-height: 0;
 }
+.evidence-board-name-button:hover,
+.evidence-board-icon-button:hover,
+.evidence-board-icon-button:focus {
+    background-color: #6b4a37;
+}
+.evidence-board-name-button StLabel {
+    font-size: 12px;
+}
+.evidence-board-icon-button {
+    color: #f0dfc6;
+}
+.evidence-board-icon-disabled { opacity: 0.35; }
+.evidence-board-action-icon { color: #f0dfc6; }
 .evidence-board-name-entry {
     background-color: #f1e9d2;
     color: #25211c;
-    padding: 5px 7px;
-    width: 214px;
+    padding: 3px 5px;
+    border-radius: 3px;
+    border: 1px solid #aa896c;
+    min-width: 0;
+    min-height: 0;
+}
+.evidence-board-confirm-menu { spacing: 9px; }
+.evidence-board-confirm-title {
+    color: #f4e8d8;
+    font-weight: bold;
+}
+.evidence-board-confirm-detail {
+    color: #e0ccb3;
+    font-size: 12px;
+}
+.evidence-board-confirm-actions { spacing: 6px; }
+.evidence-board-confirm-delete {
+    background-color: #75332d;
+    color: #fff1e5;
+    border: 1px solid #af6555;
+    border-radius: 3px;
+    padding: 6px 8px;
+}
+.evidence-board-confirm-delete:hover,
+.evidence-board-confirm-delete:focus {
+    background-color: #923f36;
 }
