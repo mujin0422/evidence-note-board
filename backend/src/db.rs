@@ -121,9 +121,9 @@ impl Storage {
         conn.execute(
             "INSERT INTO pins (id, note_id, local_x, local_y, style)
              SELECT n.id, n.id, n.width / 2.0, 0, 'red'
-             FROM notes n WHERE n.board_id=?1
-             AND NOT EXISTS (SELECT 1 FROM pins p WHERE p.note_id=n.id)",
-            [BOARD_ID],
+             FROM notes n
+             WHERE NOT EXISTS (SELECT 1 FROM pins p WHERE p.note_id=n.id)",
+            [],
         )?;
         Ok(Self { conn, assets_dir, active_board_id })
     }
