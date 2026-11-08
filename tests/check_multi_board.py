@@ -79,6 +79,28 @@ assert "evidence-settings-footer-action" in ui
 assert ".evidence-settings-footer-action {" in css
 assert "padding-left: 0;" in css and "padding-right: 0;" in css
 assert "padding: 0 0 3px;" in css
+# Outside click should dismiss Settings without swallowing the click. The
+# confirmation popup uses the same actor and is covered by this behavior.
+assert "_dismissSettingsOnOutsidePress(event)" in ui
+assert "menu.contains(source)" in ui
+assert "menu.get_transformed_position()" in ui
+assert "this._settingsButton?.contains(source)" in ui
+assert "this._closeSettingsMenu();" in ui
+assert "footerAction('Đóng'" not in ui
+# Explicit foreground/background colors are required on the actual
+# Clutter.Text note editor, not only on a CSS wrapper.
+assert "body.set_selection_color(SELECTION_BACKGROUND)" in ui
+assert "body.set_selected_text_color(SELECTION_FOREGROUND)" in ui
+assert "entry.clutter_text.set_selection_color(SELECTION_BACKGROUND)" in ui
+assert "entry.clutter_text.set_selected_text_color(SELECTION_FOREGROUND)" in ui
+# The old monotonic counter stays in schema v2 for compatibility, but it
+# must no longer dictate the next default name.
+assert "let mut number = 1_i64;" in rust
+assert "while reserved.contains(&number)" in rust
+allocator = rust[rust.index("    pub fn create_board("):rust.index("    pub fn rename_board(")]
+assert "SELECT next_board_number FROM board_state" not in allocator
+assert "SET next_board_number=MAX(next_board_number, ?1) WHERE id=1" in rust
+assert "fn board_numbers_fill_smallest_available_gap_without_relabeling_others()" in rust
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
 for snippet in ("Ctrl + B", "Ctrl + lăn chuột", "Ctrl + nhấp đúp",
                 "Shift + nhấp vào ghim", "**Esc**",

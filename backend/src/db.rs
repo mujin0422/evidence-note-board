@@ -7,7 +7,7 @@
 use crate::assets;
 use rusqlite::{params, Connection, Error, OptionalExtension, Result, Row};
 use serde::Serialize;
-use std::{fs, io::Write, path::{Path, PathBuf}};
+use std::{collections::HashSet, fs, io::Write, path::{Path, PathBuf}};
 use uuid::Uuid;
 
 const SCHEMA: &str = include_str!("../../db/migrations/0001_init.sql");
@@ -157,20 +157,39 @@ impl Storage {
 
     pub fn active_board_id(&self) -> &str { &self.active_board_id }
 
-    /// Allocate the monotonically increasing default number in one transaction.
+    /// Reuse the smallest available `board #N` label, starting from #1.
+    /// Only current display names reserve numbers: renaming or deleting a
+    /// board frees its old number. Stable UUIDs preserve all existing notes.
     pub fn create_board(&mut self) -> Result<Board> {
         let tx = self.conn.transaction()?;
-        let number: i64 = tx.query_row(
-            "SELECT next_board_number FROM board_state WHERE id=1",
-            [], |row| row.get(0),
-        )?;
+        let reserved: HashSet<i64> = {
+            let mut stmt = tx.prepare("SELECT name FROM boards WHERE name LIKE 'board #%'")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            let names = rows.collect::<Result<Vec<_>>>()?;
+            names.into_iter().filter_map(|name| {
+                name.to_ascii_lowercase().strip_prefix("board #")
+                    .and_then(|suffix| suffix.parse::<i64>().ok())
+                    .filter(|number| *number > 0)
+            }).collect()
+        };
+        let mut number = 1_i64;
+        while reserved.contains(&number) {
+            number = number.checked_add(1).ok_or(Error::InvalidQuery)?;
+        }
         let id = Uuid::new_v4().to_string();
         let name = format!("board #{number}");
         tx.execute("INSERT INTO boards (id, name) VALUES (?1, ?2)",
             params![id, name])?;
         tx.execute("INSERT INTO board_view_state (board_id) VALUES (?1)", [&id])?;
-        tx.execute("UPDATE board_state SET next_board_number=?1 WHERE id=1",
-            [number + 1])?;
+        // The old high-water mark is not used by this allocator. Keep it
+        // conservatively updated so downgrading to a v0.4.0 binary does not
+        // immediately reuse a label that this build has already allocated.
+        let fallback_next = number.checked_add(1).ok_or(Error::InvalidQuery)?;
+        tx.execute(
+            "UPDATE board_state
+             SET next_board_number=MAX(next_board_number, ?1) WHERE id=1",
+            [fallback_next],
+        )?;
         tx.commit()?;
         Ok(Board {id, name, note_count: 0})
     }
@@ -538,6 +557,52 @@ mod tests {
     }
 
     #[test]
+    fn board_numbers_fill_smallest_available_gap_without_relabeling_others() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("reused-numbers.db");
+        let mut db = Storage::open(&path).unwrap();
+        // Legacy Evidence Board is not named board #1; first new board is #1.
+        let first = db.create_board().unwrap();
+        let second = db.create_board().unwrap();
+        let third = db.create_board().unwrap();
+        assert_eq!(first.name, "board #1");
+        assert_eq!(second.name, "board #2");
+        assert_eq!(third.name, "board #3");
+        assert_eq!(db.rename_board(&second.id, "Research").unwrap().unwrap().name, "Research");
+        let second_reused = db.create_board().unwrap();
+        assert_eq!(second_reused.name, "board #2");
+        assert_eq!(db.list_boards().unwrap().iter()
+            .find(|board| board.id == third.id).unwrap().name, "board #3");
+        db.delete_board(&first.id).unwrap();
+        let first_reused = db.create_board().unwrap();
+        assert_eq!(first_reused.name, "board #1");
+        // User-defined board labels also reserve their matching number.
+        db.rename_board(&second_reused.id, "Board #4").unwrap();
+        let second_again = db.create_board().unwrap();
+        assert_eq!(second_again.name, "board #2");
+        let next = db.create_board().unwrap();
+        assert_eq!(next.name, "board #5");
+        assert_eq!(db.list_boards().unwrap().iter()
+            .find(|board| board.id == first_reused.id).unwrap().name, "board #1");
+        drop(db);
+        let mut reopened = Storage::open(&path).unwrap();
+        assert_eq!(reopened.create_board().unwrap().name, "board #6");
+        assert_eq!(reopened.list_boards().unwrap().len(), 8);
+    }
+
+    #[test]
+    fn legacy_high_water_mark_does_not_prevent_reusing_one() {
+        let mut db = mem();
+        db.conn.execute("UPDATE board_state SET next_board_number=350 WHERE id=1", []).unwrap();
+        assert_eq!(db.create_board().unwrap().name, "board #1");
+        let preserved: i64 = db.conn.query_row(
+            "SELECT next_board_number FROM board_state WHERE id=1", [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(preserved, 350);
+    }
+
+    #[test]
     fn delete_board_cascades_and_does_not_resurrect_default_on_reopen() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("delete.db");
@@ -624,7 +689,7 @@ mod tests {
         let previous = db.create_note("", "original", 1.0, 2.0).unwrap();
         db.save_view(1.5, 10.0, -20.0).unwrap();
         let second = db.create_board().unwrap();
-        assert_eq!(second.name, "board #2");
+        assert_eq!(second.name, "board #1");
         assert_eq!(second.note_count, 0);
         assert!(db.select_board(&second.id).unwrap());
         assert!(db.list_notes().unwrap().is_empty());
@@ -644,7 +709,7 @@ mod tests {
         assert_eq!(reopened.active_board_id(), second.id);
         assert_eq!(reopened.list_notes().unwrap()[0].id, note.id);
         let next = reopened.create_board().unwrap();
-        assert_eq!(next.name, "board #3");
+        assert_eq!(next.name, "board #1");
         assert!(reopened.select_board("default").unwrap());
         assert_eq!(reopened.list_notes().unwrap()[0].id, previous.id);
         assert_eq!(reopened.load_view().unwrap().zoom, 1.5);
