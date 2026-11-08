@@ -162,17 +162,17 @@ impl Storage {
     /// board frees its old number. Stable UUIDs preserve all existing notes.
     pub fn create_board(&mut self) -> Result<Board> {
         let tx = self.conn.transaction()?;
-        let reserved: HashSet<u64> = {
+        let reserved: HashSet<i64> = {
             let mut stmt = tx.prepare("SELECT name FROM boards WHERE name LIKE 'board #%'")?;
             let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
             let names = rows.collect::<Result<Vec<_>>>()?;
             names.into_iter().filter_map(|name| {
                 name.to_ascii_lowercase().strip_prefix("board #")
-                    .and_then(|suffix| suffix.parse::<u64>().ok())
+                    .and_then(|suffix| suffix.parse::<i64>().ok())
                     .filter(|number| *number > 0)
             }).collect()
         };
-        let mut number = 1_u64;
+        let mut number = 1_i64;
         while reserved.contains(&number) {
             number = number.checked_add(1).ok_or(Error::InvalidQuery)?;
         }
@@ -181,8 +181,15 @@ impl Storage {
         tx.execute("INSERT INTO boards (id, name) VALUES (?1, ?2)",
             params![id, name])?;
         tx.execute("INSERT INTO board_view_state (board_id) VALUES (?1)", [&id])?;
-        // The old next_board_number column is kept for schema-v2 compatibility;
-        // it is no longer used as the allocation source.
+        // The old high-water mark is not used by this allocator. Keep it
+        // conservatively updated so downgrading to a v0.4.0 binary does not
+        // immediately reuse a label that this build has already allocated.
+        let fallback_next = number.checked_add(1).ok_or(Error::InvalidQuery)?;
+        tx.execute(
+            "UPDATE board_state
+             SET next_board_number=MAX(next_board_number, ?1) WHERE id=1",
+            [fallback_next],
+        )?;
         tx.commit()?;
         Ok(Board {id, name, note_count: 0})
     }
@@ -588,6 +595,11 @@ mod tests {
         let mut db = mem();
         db.conn.execute("UPDATE board_state SET next_board_number=350 WHERE id=1", []).unwrap();
         assert_eq!(db.create_board().unwrap().name, "board #1");
+        let preserved: i64 = db.conn.query_row(
+            "SELECT next_board_number FROM board_state WHERE id=1", [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(preserved, 350);
     }
 
     #[test]
