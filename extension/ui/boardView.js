@@ -33,6 +33,13 @@ import {boundedImageDecodeSize} from '../geometry/imageSizing.js';
 import {DEFAULT_PREFERENCES,singleScreenLayout,curveVisible,reconnectDelay}
     from '../core/runtimePolicy.js';
 
+// Distinct selection background and foreground make highlighted text readable
+// on both cream-colored paper and the board-name editor.
+const SELECTION_BACKGROUND = new Cogl.Color();
+SELECTION_BACKGROUND.init_from_4f(0x61 / 255, 0x37 / 255, 0x2e / 255, 1.0);
+const SELECTION_FOREGROUND = new Cogl.Color();
+SELECTION_FOREGROUND.init_from_4f(1.0, 1.0, 1.0, 1.0);
+
 const INITIAL_VIEW = Object.freeze({zoom: 1, panX: 0, panY: 0});
 const CARET_BLINK_MS = 530;
 const PAPER_COLORS = Object.freeze(['#E9D898','#EFE2AD','#F4EBC6','#FAF6E4','#FFFFFF']);
@@ -444,6 +451,25 @@ export class BoardView {
         this._settingsMenu=null;
     }
 
+    // Stage capture sees outside clicks even if an underlying note consumes
+    // the event. Preserve clicks on the gear (its own handler toggles the
+    // menu) and on any popup child. Do not consume the original pointer event.
+    _dismissSettingsOnOutsidePress(event) {
+        const menu=this._settingsMenu;
+        if (!menu)
+            return;
+        const source=event.get_source();
+        if (source && (menu.contains(source) ||
+            this._settingsButton?.contains(source)))
+            return;
+        const [x,y]=event.get_coords();
+        const [mx,my]=menu.get_transformed_position();
+        if (x>=mx && y>=my &&
+            x<mx+menu.get_width() && y<my+menu.get_height())
+            return;
+        this._closeSettingsMenu();
+    }
+
     // Destroy the note/text context menu and release its actor references.
     _closeNoteMenu() {
         this._noteMenu?.destroy();
@@ -700,6 +726,8 @@ export class BoardView {
                     text:board.name,can_focus:true,
                     style_class:'evidence-board-name-entry',
                 });
+                entry.clutter_text.set_selection_color(SELECTION_BACKGROUND);
+                entry.clutter_text.set_selected_text_color(SELECTION_FOREGROUND);
                 entry.set_height(30);
                 entry.set_width(1);
                 row.add_child(entry);
@@ -737,7 +765,7 @@ export class BoardView {
         footerAction(`Dây đỏ: ${this._preferences.show_strings?'Hiện':'Ẩn'}`,
             ()=>this._savePreferences({...this._preferences,
                 show_strings:!this._preferences.show_strings}));
-        footerAction('Đóng',()=>this._closeSettingsMenu());
+        // Click or tap outside Settings to dismiss; no redundant Close row.
         this._showSettingsPopup(menu);
     }
 
@@ -1945,6 +1973,8 @@ export class BoardView {
         if (!this._alive)
             return Clutter.EVENT_PROPAGATE;
         const type = event.type();
+        if (type===Clutter.EventType.BUTTON_PRESS)
+            this._dismissSettingsOnOutsidePress(event);
         if (type===Clutter.EventType.BUTTON_PRESS && event.get_button()===1)
             this._blurEditorOnOutsidePress(event);
         // Capture text presses before Clutter.Text/its click gesture can
@@ -2148,6 +2178,10 @@ export class BoardView {
             line_wrap_mode: Pango.WrapMode.WORD_CHAR,
             color: ink,
         });
+        // A dark burgundy selection with white lettering remains legible on
+        // every supported paper color, including rich-text spans.
+        body.set_selection_color(SELECTION_BACKGROUND);
+        body.set_selected_text_color(SELECTION_FOREGROUND);
         // Fixed coordinates leave exactly the configured paper padding and
         // allow inline badge actors to sit above the editable text.
         body.set_position(TEXT_HORIZONTAL_PADDING,TEXT_VERTICAL_PADDING);
