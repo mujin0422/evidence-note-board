@@ -15,7 +15,7 @@ No board is implicitly deleted. Existing notes, images, pins and strings are pre
 
 ## Data and upgrade
 Existing schema v1 files are upgraded transactionally to schema v2 when the backend starts.
-Migration 0002 creates `board_state`, retaining the original `default` board and all linked records. The active board ID is persisted in SQLite so selection survives logout and backend restart. The legacy `next_board_number` column remains for schema compatibility but no longer controls automatic names.
+Migration 0002 creates `board_state`, retaining the original `default` board and all linked records. The active board ID is persisted in SQLite so selection survives logout and backend restart. The legacy `next_board_number` column remains for schema compatibility and is conservatively updated for older binaries, but it no longer controls automatic names.
 Notes and camera state remain scoped by `board_id`. Operations targeting a note on another board are rejected.
 
 Before updating, back up the user data with the existing `scripts/backup-board.py` utility. Upgrade does not overwrite the database or copy notes between boards. Rolling back the application to v0.3.0 is **not** supported on a migrated database (schema v2); restore a pre-upgrade backup to downgrade.
