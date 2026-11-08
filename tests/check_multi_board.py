@@ -95,10 +95,10 @@ assert "entry.clutter_text.set_selection_color(SELECTION_BACKGROUND)" in ui
 assert "entry.clutter_text.set_selected_text_color(SELECTION_FOREGROUND)" in ui
 # The old monotonic counter stays in schema v2 for compatibility, but it
 # must no longer dictate the next default name.
-assert "let mut number = 1_u64;" in rust
+assert "let mut number = 1_i64;" in rust
 assert "while reserved.contains(&number)" in rust
 assert "next_board_number FROM board_state" not in rust
-assert "tx.execute(\"UPDATE board_state SET next_board_number" not in rust
+assert "SET next_board_number=MAX(next_board_number, ?1) WHERE id=1" in rust
 assert "fn board_numbers_fill_smallest_available_gap_without_relabeling_others()" in rust
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
 for snippet in ("Ctrl + B", "Ctrl + lăn chuột", "Ctrl + nhấp đúp",
