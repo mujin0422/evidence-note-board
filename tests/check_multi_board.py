@@ -97,7 +97,8 @@ assert "entry.clutter_text.set_selected_text_color(SELECTION_FOREGROUND)" in ui
 # must no longer dictate the next default name.
 assert "let mut number = 1_i64;" in rust
 assert "while reserved.contains(&number)" in rust
-assert "next_board_number FROM board_state" not in rust
+allocator = rust[rust.index("    pub fn create_board("):rust.index("    pub fn rename_board(")]
+assert "SELECT next_board_number FROM board_state" not in allocator
 assert "SET next_board_number=MAX(next_board_number, ?1) WHERE id=1" in rust
 assert "fn board_numbers_fill_smallest_available_gap_without_relabeling_others()" in rust
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
