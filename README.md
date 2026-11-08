@@ -2,7 +2,7 @@
 
 **Evidence Note Board** là bảng ghi chú kiểu *evidence board* chạy trực tiếp trên desktop, dành cho **Fedora 44 + GNOME Shell 50 + Wayland**. Ứng dụng cho phép ghim ghi chú văn bản, ảnh, kết nối chúng bằng dây đỏ, phóng to/thu nhỏ khung nhìn và quản lý **nhiều board**. Dữ liệu được lưu cục bộ bằng **SQLite**; không cần tài khoản hoặc đồng bộ đám mây.
 
-> **Phiên bản:** nhánh `dev` đang phát triển **v0.4.0**. Bản phát hành ổn định gần nhất là **v0.3.0**. Để kiểm tra bản phát hành hiện có và tải RPM, xem [GitHub Releases](https://github.com/mujin0422/evidence-note-board/releases). Không nhầm mã nguồn `dev` với một bản phát hành chính thức.
+> **Phiên bản:** bản phát hành ổn định gần nhất là **v0.4.0**; nhánh `dev` có thể chứa các sửa đổi chưa phát hành. Để kiểm tra bản phát hành hiện có và tải RPM, xem [GitHub Releases](https://github.com/mujin0422/evidence-note-board/releases). Không nhầm mã nguồn `dev` với một bản phát hành chính thức.
 
 ## 1. Phím tắt và thao tác sử dụng
 
@@ -28,11 +28,11 @@ Các phím tắt sau được đối chiếu với mã nguồn GNOME Extension h
 
 Nhấn nút **bánh răng (Settings)** nằm gần HUD ở góc trên bên trái desktop:
 
-1. **Thêm board:** nhấn nút cùng hàng tiêu đề **BOARDS**. Tên tự động lần lượt là `board #2`, `board #3`, …
+1. **Thêm board:** nhấn nút cùng hàng tiêu đề **BOARDS**. Ứng dụng tự chọn số nguyên dương nhỏ nhất chưa được sử dụng trong các tên `board #N`, bắt đầu từ `board #1`. Đổi tên hoặc xóa board sẽ giải phóng số cũ để lần tạo sau dùng lại; các board khác không bị đổi tên.
 2. **Chọn board:** nhấn vào tên trong danh sách; dấu **●** đánh dấu board đang hiển thị. Mỗi board có note, ảnh, dây đỏ và trạng thái zoom/pan riêng.
 3. **Đổi tên:** nhấn icon **bút chì**, nhập tên mới, chọn **Lưu**.
 4. **Xóa:** nhấn icon **thùng rác**, đọc thông báo và xác nhận. Xóa board là **xóa vĩnh viễn** toàn bộ note, ảnh và dây đỏ thuộc board đó. Không thể xóa board cuối cùng.
-5. **HUD / Dây đỏ:** bật/tắt phần hiển thị tương ứng. Nhấn **Đóng** để đóng menu.
+5. **HUD / Dây đỏ:** bật/tắt phần hiển thị tương ứng. **Nhấp ra bên ngoài popup** hoặc nhấn lại nút bánh răng để đóng Settings.
 
 Ứng dụng ghi nhớ board đang chọn qua lần khởi động lại. Khi chuyển board, GNOME chỉ dựng các note của board hiện tại; note và ảnh ở board không hoạt động không được giữ dưới dạng actor đang hiển thị.
 
