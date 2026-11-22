@@ -15,6 +15,7 @@ Các phím tắt sau được đối chiếu với mã nguồn GNOME Extension h
 | **Ctrl + lăn chuột** | Phóng to / thu nhỏ board quanh vị trí con trỏ. |
 | **Giữ chuột trái và kéo** tại vùng board trống | Di chuyển khung nhìn (pan). Không phải kéo bằng nút chuột giữa. |
 | **Ctrl + B** khi đang chỉnh sửa note văn bản | Bật/tắt chữ **đậm** trên đoạn văn bản đang chọn. |
+| **Nhấp vào dòng “Thêm tiêu đề…” dưới ảnh** | Nhập hoặc sửa tiêu đề ảnh. Nội dung tự lưu, tối đa 120 ký tự, trên cùng thẻ ảnh. |
 | **Shift + nhấp vào ghim** của một note, sau đó **nhấp ghim** note khác | Nối hai note bằng dây đỏ. Có thể giữ Shift rồi kéo từ ghim nguồn đến ghim đích. |
 | **Esc** trong khi đang kéo/chọn điểm nối dây đỏ | Hủy thao tác nối dây đỏ đang thực hiện. |
 | **Nhấp chuột phải trên vùng văn bản** | Mở menu đổi màu giấy, chữ đỏ thẫm (khi có vùng chọn) và chèn nhãn CEFR. |
@@ -33,6 +34,8 @@ Nhấn nút **bánh răng (Settings)** nằm gần HUD ở góc trên bên trái
 3. **Đổi tên:** nhấn icon **bút chì**, nhập tên mới, chọn **Lưu**.
 4. **Xóa:** nhấn icon **thùng rác**, đọc thông báo và xác nhận. Xóa board là **xóa vĩnh viễn** toàn bộ note, ảnh và dây đỏ thuộc board đó. Không thể xóa board cuối cùng.
 5. **HUD / Dây đỏ:** bật/tắt phần hiển thị tương ứng. **Nhấp ra bên ngoài popup** hoặc nhấn lại nút bánh răng để đóng Settings.
+
+Tiêu đề bên dưới ảnh được lưu riêng trong trường `title` của note ảnh (không tạo note mới). Khi kéo, phóng to ảnh hoặc chuyển board, tiêu đề vẫn đi cùng ảnh.
 
 Ứng dụng ghi nhớ board đang chọn qua lần khởi động lại. Khi chuyển board, GNOME chỉ dựng các note của board hiện tại; note và ảnh ở board không hoạt động không được giữ dưới dạng actor đang hiển thị.
 
