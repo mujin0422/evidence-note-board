@@ -100,9 +100,26 @@
 .evidence-photo {
     background-color: #f1e9d2;
     border-radius: 2px;
-    padding: 8px 12px 22px 12px;
+    /* The former blank Polaroid footer now holds a caption editor. */
+    padding: 8px 12px 6px 12px;
     spacing: 4px;
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+}
+.evidence-photo-caption {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    min-width: 0;
+    min-height: 0;
+    color: #514837;
+    font-size: 12px;
+    font-weight: bold;
+    -st-placeholder-color: #8b8170;
+}
+.evidence-photo-caption:focus {
+    background-color: rgba(81, 72, 55, 0.06);
 }
 .evidence-photo-header {
     spacing: 4px;

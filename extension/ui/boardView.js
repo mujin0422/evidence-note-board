@@ -1162,8 +1162,9 @@ export class BoardView {
         item.actor.set_pivot_point(0.5, 0.5);
         item.actor.set_rotation_angle(Clutter.RotateAxis.Z_AXIS, note.rotation);
         if (note.type === 'image') {
-            item.photo?.set_size(Math.max(60, note.width - 24),
-                Math.max(60, note.height - 48));
+            const imageWidth=Math.max(60,note.width-24);
+            item.photo?.set_size(imageWidth,Math.max(60,note.height-48));
+            item.caption?.set_width(imageWidth);
         } else if (item.body) {
             item.body.set_position(TEXT_HORIZONTAL_PADDING,TEXT_VERTICAL_PADDING);
             item.body.set_size(
@@ -1591,7 +1592,10 @@ export class BoardView {
         }).finally(() => this._deletingNotes.delete(id));
     }
 
-    // Build a non-editable Polaroid actor for an imported local image.
+    // An image stays a photo asset with an independently editable caption
+    // in the existing SQLite title column, never a second rich-text note.
+    // The 500ms note debounce also handles the caption editor.
+    // Build the Polaroid actor for an imported local image.
     _renderImageNote(note) {
         if (!this._alive || this._notes.has(note.id))
             return;
@@ -1623,9 +1627,31 @@ export class BoardView {
         photo.set_size(photoWidth,photoHeight);
         paper.add_child(photo);
 
-        this._notes.set(note.id, {note, actor: paper, photo,
+        // The paper's existing white lower strip is now an editable caption.
+        // No second asset, no polling, and no extra database migration.
+        const caption=new St.Entry({
+            text:note.title??'',
+            hint_text:'Thêm tiêu đề…',
+            can_focus:true,
+            style_class:'evidence-photo-caption',
+        });
+        caption.set_width(photoWidth);
+        caption.set_height(22);
+        caption.clutter_text.set_max_length(120);
+        caption.clutter_text.set_line_alignment(Pango.Alignment.CENTER);
+        caption.clutter_text.set_selection_color(SELECTION_BACKGROUND);
+        caption.clutter_text.set_selected_text_color(SELECTION_FOREGROUND);
+        paper.add_child(caption);
+
+        this._notes.set(note.id, {note, actor:paper, photo, caption,
             persistedGeometry:{width:note.width,height:note.height,
                 rotation:note.rotation}});
+        caption.clutter_text.connect('notify::text',()=>{
+            if (!this._alive)
+                return;
+            note.title=caption.get_text();
+            this._scheduleNote(note.id);
+        });
         this._world.add_child(paper);
         this._connectPaperGestures(paper, note);
         this._installPin(note);
@@ -1839,6 +1865,13 @@ export class BoardView {
     // Bind paper-level gestures while preserving native text editing.
     _connectPaperGestures(paper, note) {
         paper.connect('button-press-event', (_actor, event) => {
+            // Editing an image caption must not start dragging the photo.
+            // Preserve the St.Entry focus, selection and native key handling.
+            const caption=this._notes.get(note.id)?.caption;
+            if (note.type==='image' && caption &&
+                (event.get_source()===caption ||
+                    caption.contains(event.get_source())))
+                return Clutter.EVENT_STOP;
             if (event.get_button()===3 && note.type==='text') {
                 const item=this._notes.get(note.id);
                 if (item)
@@ -2280,7 +2313,20 @@ export class BoardView {
         const item = this._notes.get(id);
         if (!item || !this._service)
             return;
-        if (!item.body) // Image notes contain no editable text.
+        if (item.caption) {
+            // Keep photo metadata separate from the rich-text note body.
+            const title=item.caption.get_text();
+            this._service.updateImageCaption(id,title).then(()=>{
+                if (this._alive && item.caption &&
+                    item.caption.get_text()===title)
+                    this._dirtyNotes.delete(id);
+            }).catch(()=>{
+                this._dirtyNotes.add(id);
+                this._saveError();
+            });
+            return;
+        }
+        if (!item.body)
             return;
         const content=encodeRichText(item.body.get_text(),item.boldSpans,
             item.redSpans,item.badges);
