@@ -52,6 +52,17 @@ fn validate_text(title: &str, content: &str) -> zbus::fdo::Result<()> {
     Ok(())
 }
 
+/// A photo caption is a single line, including an optional empty caption.
+fn validate_image_caption(caption: &str) -> zbus::fdo::Result<()> {
+    if caption.chars().count() > 120 || caption.len() > 512 ||
+        caption.chars().any(char::is_control) {
+        return Err(zbus::fdo::Error::InvalidArgs(
+            "Image caption must be a single line of at most 120 characters".into()
+        ));
+    }
+    Ok(())
+}
+
 /// Accept only finite world coordinates within the supported canvas range.
 fn validate_position(x: f64, y: f64) -> zbus::fdo::Result<()> {
     if !x.is_finite() || !y.is_finite() || x.abs() > 1_000_000.0 || y.abs() > 1_000_000.0 {
@@ -158,6 +169,18 @@ impl NoteApi {
         validate_text(title, content)?;
         if !self.with_db(|db| db.update_note(id, title, content))? {
             return Err(zbus::fdo::Error::Failed("Note not found".into()));
+        }
+        Ok(())
+    }
+
+    /// Save a caption without changing the photo asset or rich-text notes.
+    fn update_image_caption(&self, id: &str, caption: &str) -> zbus::fdo::Result<()> {
+        if id.len() > 80 || id.is_empty() {
+            return Err(zbus::fdo::Error::InvalidArgs("Invalid note ID".into()));
+        }
+        validate_image_caption(caption)?;
+        if !self.with_db(|db| db.update_image_caption(id, caption))? {
+            return Err(zbus::fdo::Error::Failed("Image note not found".into()));
         }
         Ok(())
     }
@@ -311,6 +334,10 @@ mod tests {
         assert!(PAPER_COLORS.contains(&"#FFFFFF"));
         assert!(!PAPER_COLORS.contains(&"#000000"));
         assert_eq!(validate_board_name("  Thư viện  ").unwrap(), "Thư viện");
+        assert!(validate_image_caption("Ảnh chứng cứ").is_ok());
+        assert!(validate_image_caption("").is_ok());
+        assert!(validate_image_caption("abc\nxyz").is_err());
+        assert!(validate_image_caption(&"x".repeat(121)).is_err());
         assert!(validate_board_name(" ").is_err());
         assert!(validate_board_name("abc\nxyz").is_err());
     }
