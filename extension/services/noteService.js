@@ -28,6 +28,9 @@ const XML = `<node>
       <arg type="s" direction="in"/><arg type="s" direction="in"/>
       <arg type="s" direction="in"/>
     </method>
+    <method name="UpdateImageCaption">
+      <arg type="s" direction="in"/><arg type="s" direction="in"/>
+    </method>
     <method name="MoveNote">
       <arg type="s" direction="in"/><arg type="d" direction="in"/>
       <arg type="d" direction="in"/>
@@ -174,6 +177,11 @@ export class NoteService {
     // Save the legacy title field and rich/plain body payload.
     updateNote(id, title, content) {
         return this._enqueue(() => this._proxy.UpdateNoteAsync(id, title, content));
+    }
+
+    // Save photo captions in write order without loading any image assets.
+    updateImageCaption(id, caption) {
+        return this._enqueue(() => this._proxy.UpdateImageCaptionAsync(id, caption));
     }
 
     // Persist a note's world-space position.
