@@ -408,6 +408,16 @@ impl Storage {
         )? == 1)
     }
 
+    /// Image captions are stored in the existing title column; text-note
+    /// editing remains a separate operation with its own rich text payload.
+    pub fn update_image_caption(&self, id: &str, caption: &str) -> Result<bool> {
+        Ok(self.conn.execute(
+            "UPDATE notes SET title=?1, updated_at=unixepoch()
+             WHERE id=?2 AND board_id=?3 AND type='image'",
+            params![caption, id, &self.active_board_id],
+        )? == 1)
+    }
+
     /// Persist the world-space position of either note type.
     pub fn move_note(&self, id: &str, x: f64, y: f64) -> Result<bool> {
         Ok(self.conn.execute(
@@ -789,6 +799,38 @@ mod tests {
         assert!(db.delete_note(&saved.id).unwrap());
         assert!(!Path::new(&stored).exists());
         assert!(db.list_notes().unwrap().is_empty());
+    }
+
+    #[test]
+    fn image_caption_persists_and_is_scoped_to_its_board() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.png");
+        image::RgbImage::new(120, 80)
+            .save_with_format(&source, image::ImageFormat::Png).unwrap();
+        let db_path = temp.path().join("captions.db");
+        let (image_id, text_id, other_id) = {
+            let mut db = Storage::open(&db_path).unwrap();
+            let image = db.import_image(&source, 0.0, 0.0).unwrap();
+            let text = db.create_note("", "original text", 5.0, 5.0).unwrap();
+            assert!(!db.update_image_caption(&text.id, "not a photo").unwrap());
+            assert!(db.update_image_caption(&image.id, "Bằng chứng số 1").unwrap());
+            assert_eq!(db.get_note(&image.id).unwrap().unwrap().title, "Bằng chứng số 1");
+            let other = db.create_board().unwrap();
+            assert!(db.select_board(&other.id).unwrap());
+            assert!(!db.update_image_caption(&image.id, "other board").unwrap());
+            assert!(db.list_notes().unwrap().is_empty());
+            (image.id, text.id, other.id)
+        };
+        let mut reopened = Storage::open(&db_path).unwrap();
+        assert_eq!(reopened.active_board_id(), other_id);
+        assert!(reopened.select_board("default").unwrap());
+        let image = reopened.get_note(&image_id).unwrap().unwrap();
+        assert_eq!(image.title, "Bằng chứng số 1");
+        assert_eq!(image.content, "");
+        assert_eq!(reopened.get_note(&text_id).unwrap().unwrap().content, "original text");
+        assert!(reopened.update_image_caption(&image_id, "").unwrap());
+        assert_eq!(reopened.get_note(&image_id).unwrap().unwrap().title, "");
+        assert!(reopened.update_image_caption(&image_id, "Ảnh lưu trong SQLite").unwrap());
     }
 
     #[cfg(unix)]
