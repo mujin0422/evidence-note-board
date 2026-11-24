@@ -116,7 +116,7 @@ for snippet in (
     "Add board",
     "the last remaining board cannot be deleted",
     "scripts/backup-board.py backup",
-    "UpdateImageCaption",
+    "image-caption feature",
 ):
     assert snippet in readme, snippet
 print("v0.4.0 multi-board migration and lifecycle checks: OK (static only)")
