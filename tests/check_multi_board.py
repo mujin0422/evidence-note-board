@@ -102,9 +102,21 @@ assert "SELECT next_board_number FROM board_state" not in allocator
 assert "SET next_board_number=MAX(next_board_number, ?1) WHERE id=1" in rust
 assert "fn board_numbers_fill_smallest_available_gap_without_relabeling_others()" in rust
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
-for snippet in ("Ctrl + B", "Ctrl + lăn chuột", "Ctrl + nhấp đúp",
-                "Shift + nhấp vào ghim", "**Esc**",
-                "Thêm board", "Không thể xóa board cuối cùng",
-                "scripts/backup-board.py backup"):
+# README is English-language user documentation; literal localized UI labels
+# are allowed when accurately quoted from the current GNOME implementation.
+for snippet in (
+    "Latest published release",
+    "v0.4.0",
+    "PR #40",
+    "Ctrl + B",
+    "Ctrl + mouse wheel",
+    "Ctrl + double-click",
+    "Shift + click",
+    "**Esc**",
+    "Add board",
+    "the last remaining board cannot be deleted",
+    "scripts/backup-board.py backup",
+    "image-caption feature",
+):
     assert snippet in readme, snippet
 print("v0.4.0 multi-board migration and lifecycle checks: OK (static only)")
